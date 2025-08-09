@@ -8,11 +8,14 @@ export struct WebViewSettings {
   @Link inputUrl: string;
   @Link savedUrls: string[];
   @Link showDebugInfo: boolean;
-  @Prop webController: webview.WebviewController;
-  @Prop dataPreferences?: preferences.Preferences;
-  @Prop addDebugMessage: (message: string) => void;
-  @Prop saveUrl: (url: string) => Promise<void>;
-  @Prop deleteUrl: (url: string) => Promise<void>;
+  @Prop controllerAttached: boolean;
+  webController?: webview.WebviewController;
+  dataPreferences?: preferences.Preferences;
+  
+  // 事件回调函数
+  onAddDebugMessage?: (message: string) => void;
+  onSaveUrl?: (url: string) => Promise<void>;
+  onDeleteUrl?: (url: string) => Promise<void>;
 
   build() {
     if (this.showUrlSettings) {
@@ -71,9 +74,41 @@ export struct WebViewSettings {
               .margin({ right: 8 })
               .onClick(async () => {
                 if (this.inputUrl.trim()) {
-                  await this.saveUrl(this.inputUrl.trim());
-                  this.webController.loadUrl(this.currentUrl);
-                  this.showUrlSettings = false;
+                  try {
+                     let urlToLoad = this.inputUrl.trim();
+                     // 确保URL格式正确
+                     if (!urlToLoad.startsWith('http://') && !urlToLoad.startsWith('https://')) {
+                       urlToLoad = 'https://' + urlToLoad;
+                     }
+                     
+                     if (this.onAddDebugMessage) {
+                       this.onAddDebugMessage(`💾 保存并访问: ${urlToLoad}`);
+                     }
+                     if (this.onSaveUrl) {
+                       await this.onSaveUrl(urlToLoad);
+                     }
+                     // 更新当前URL并保存到preferences
+                     this.currentUrl = urlToLoad;
+                     if (this.dataPreferences) {
+                       await this.dataPreferences.put('current_url', urlToLoad);
+                       await this.dataPreferences.flush();
+                     }
+                     
+                     // 检查Controller是否已绑定
+                     if (!this.controllerAttached || !this.webController) {
+                       if (this.onAddDebugMessage) {
+                         this.onAddDebugMessage(`⚠️ WebviewController 未绑定，无法加载URL`);
+                       }
+                       return;
+                     }
+                     
+                     this.webController.loadUrl(urlToLoad);
+                     this.showUrlSettings = false;
+                   } catch (error) {
+                     if (this.onAddDebugMessage) {
+                       this.onAddDebugMessage(`❌ 保存并访问失败: ${JSON.stringify(error)}`);
+                     }
+                   }
                 }
               })
 
@@ -84,8 +119,26 @@ export struct WebViewSettings {
               .borderRadius(8)
               .layoutWeight(1)
               .onClick(() => {
-                this.webController.refresh();
-                this.showUrlSettings = false;
+                try {
+                  if (this.onAddDebugMessage) {
+                    this.onAddDebugMessage('🔄 刷新当前页面');
+                  }
+                  
+                  // 检查Controller是否已绑定
+                  if (!this.controllerAttached || !this.webController) {
+                    if (this.onAddDebugMessage) {
+                      this.onAddDebugMessage(`⚠️ WebviewController 未绑定，无法刷新页面`);
+                    }
+                    return;
+                  }
+                  
+                  this.webController.refresh();
+                  this.showUrlSettings = false;
+                } catch (error) {
+                  if (this.onAddDebugMessage) {
+                    this.onAddDebugMessage(`❌ 刷新页面失败: ${JSON.stringify(error)}`);
+                  }
+                }
               })
           }
           .width('100%')
@@ -127,13 +180,31 @@ export struct WebViewSettings {
                       .padding({ left: 8, right: 8, top: 4, bottom: 4 })
                       .margin({ left: 8, right: 8 })
                       .onClick(async () => {
-                        this.currentUrl = url;
-                        if (this.dataPreferences) {
-                          await this.dataPreferences.put('current_url', url);
-                          await this.dataPreferences.flush();
+                        try {
+                          this.currentUrl = url;
+                          if (this.dataPreferences) {
+                            await this.dataPreferences.put('current_url', url);
+                            await this.dataPreferences.flush();
+                          }
+                          if (this.onAddDebugMessage) {
+                            this.onAddDebugMessage(`🌐 访问保存的地址: ${url}`);
+                          }
+                          
+                          // 检查Controller是否已绑定
+                          if (!this.controllerAttached || !this.webController) {
+                            if (this.onAddDebugMessage) {
+                              this.onAddDebugMessage(`⚠️ WebviewController 未绑定，无法访问地址`);
+                            }
+                            return;
+                          }
+                          
+                          this.webController.loadUrl(url);
+                          this.showUrlSettings = false;
+                        } catch (error) {
+                          if (this.onAddDebugMessage) {
+                            this.onAddDebugMessage(`❌ 访问地址失败: ${JSON.stringify(error)}`);
+                          }
                         }
-                        this.webController.loadUrl(url);
-                        this.showUrlSettings = false;
                       })
 
                     Button('删除')
@@ -143,7 +214,9 @@ export struct WebViewSettings {
                       .borderRadius(6)
                       .padding({ left: 8, right: 8, top: 4, bottom: 4 })
                       .onClick(async () => {
-                        await this.deleteUrl(url);
+                        if (this.onDeleteUrl) {
+                          await this.onDeleteUrl(url);
+                        }
                       })
                   }
                   .width('100%')
@@ -151,7 +224,7 @@ export struct WebViewSettings {
                   .backgroundColor(index % 2 === 0 ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.1)')
                   .borderRadius(8)
                   .margin({ bottom: 4 })
-                }, (url: string, index: number) => `url_${index}`)
+                }, (url: string, index: number) => url)
               }
             }
             .scrollable(ScrollDirection.Vertical)
@@ -182,8 +255,26 @@ export struct WebViewSettings {
             .borderRadius(8)
             .layoutWeight(1)
             .onClick(() => {
-              this.webController.loadUrl(this.currentUrl);
-              this.showUrlSettings = false;
+              try {
+                if (this.onAddDebugMessage) {
+                  this.onAddDebugMessage(`🔄 重新加载页面: ${this.currentUrl}`);
+                }
+                
+                // 检查Controller是否已绑定
+                if (!this.controllerAttached || !this.webController) {
+                  if (this.onAddDebugMessage) {
+                    this.onAddDebugMessage(`⚠️ WebviewController 未绑定，无法重新加载页面`);
+                  }
+                  return;
+                }
+                
+                this.webController.loadUrl(this.currentUrl);
+                this.showUrlSettings = false;
+              } catch (error) {
+                if (this.onAddDebugMessage) {
+                  this.onAddDebugMessage(`❌ 重新加载失败: ${JSON.stringify(error)}`);
+                }
+              }
             })
         }
         .width('100%')

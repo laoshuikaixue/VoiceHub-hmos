@@ -2,7 +2,9 @@
 export struct DebugInfo {
   @Link showDebugInfo: boolean;
   @Prop debugMessages: string[];
-  @Prop clearDebugMessages: () => void;
+  
+  // 事件回调函数
+  onClearDebugMessages?: () => void;
 
   build() {
     if (this.showDebugInfo && this.debugMessages.length > 0) {
@@ -23,7 +25,9 @@ export struct DebugInfo {
             .borderRadius(4)
             .margin({ right: 8 })
             .onClick(() => {
-              this.clearDebugMessages();
+              if (this.onClearDebugMessages) {
+                this.onClearDebugMessages();
+              }
             })
 
           Button() {

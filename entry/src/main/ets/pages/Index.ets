@@ -24,6 +24,7 @@ struct Index {
   @State showUrlSettings: boolean = false;
   @State inputUrl: string = '';
   @State savedUrls: string[] = [];
+  @State controllerAttached: boolean = false;
   
   // 播放列表状态
   @State currentPlaylistIndex: number = -1;
@@ -144,13 +145,14 @@ struct Index {
       if (!url.trim()) return;
       
       // 验证URL格式
-      if (!url.startsWith('http://') && !url.startsWith('https://')) {
-        url = 'https://' + url;
+      let processedUrl = url.trim();
+      if (!processedUrl.startsWith('http://') && !processedUrl.startsWith('https://')) {
+        processedUrl = 'https://' + processedUrl;
       }
       
       // 避免重复
-      if (!this.savedUrls.includes(url)) {
-        this.savedUrls.unshift(url);
+      if (!this.savedUrls.includes(processedUrl)) {
+        this.savedUrls.unshift(processedUrl);
         // 最多保存10个URL
         if (this.savedUrls.length > 10) {
           this.savedUrls = this.savedUrls.slice(0, 10);
@@ -160,16 +162,13 @@ struct Index {
           await this.dataPreferences.put('saved_urls', JSON.stringify(this.savedUrls));
           await this.dataPreferences.flush();
         }
+        this.addDebugMessage(`💾 URL已保存到列表: ${processedUrl}`);
+      } else {
+        this.addDebugMessage(`ℹ️ URL已存在于列表中: ${processedUrl}`);
       }
       
-      // 设置为当前URL
-      this.currentUrl = url;
-      if (this.dataPreferences) {
-        await this.dataPreferences.put('current_url', url);
-        await this.dataPreferences.flush();
-      }
+      // 注意：不在这里更新currentUrl，让调用方决定是否要加载
       
-      this.addDebugMessage(`💾 URL已保存: ${url}`);
     } catch (error) {
       this.addDebugMessage(`❌ 保存URL失败: ${JSON.stringify(error)}`);
     }
@@ -1200,6 +1199,10 @@ struct Index {
           .mixedMode(MixedMode.All)
           .cacheMode(CacheMode.Default)
           .userAgent('VoiceHub-HarmonyOS/1.0.0 (HarmonyOS; Mobile) Mozilla/5.0 (Linux; Android 10; HarmonyOS) AppleWebKit/537.36')
+          .onControllerAttached(() => {
+            this.controllerAttached = true;
+            this.addDebugMessage('🔗 WebviewController 已成功绑定到 Web 组件');
+          })
           .onProgressChange((event) => {
             this.loadProgress = event?.newProgress || 0;
             this.addDebugMessage(`📊 页面加载进度: ${this.loadProgress}%`);
@@ -1275,11 +1278,12 @@ struct Index {
         inputUrl: $inputUrl,
         savedUrls: $savedUrls,
         showDebugInfo: $showDebugInfo,
+        controllerAttached: this.controllerAttached,
         webController: this.webController,
         dataPreferences: this.dataPreferences,
-        addDebugMessage: this.addDebugMessage.bind(this),
-        saveUrl: this.saveUrl.bind(this),
-        deleteUrl: this.deleteUrl.bind(this)
+        onAddDebugMessage: this.addDebugMessage.bind(this),
+        onSaveUrl: this.saveUrl.bind(this),
+        onDeleteUrl: this.deleteUrl.bind(this)
       })
 
 
@@ -1288,7 +1292,7 @@ struct Index {
       DebugInfo({
         showDebugInfo: $showDebugInfo,
         debugMessages: this.debugMessages,
-        clearDebugMessages: this.clearDebugMessages.bind(this)
+        onClearDebugMessages: this.clearDebugMessages.bind(this)
       })
     }
     .width('100%')
