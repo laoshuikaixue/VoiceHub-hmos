@@ -2,15 +2,23 @@
   "string": [
     {
       "name": "module_desc",
-      "value": "module description"
+      "value": "VoiceHub主模块 - 语音控制音乐播放器"
     },
     {
       "name": "EntryAbility_desc",
-      "value": "description"
+      "value": "VoiceHub应用主入口"
     },
     {
       "name": "EntryAbility_label",
-      "value": "label"
+      "value": "VoiceHub"
+    },
+    {
+      "name": "internet_permission_reason",
+      "value": "应用需要访问网络以获取音乐数据和与服务器通信"
+    },
+    {
+      "name": "network_info_permission_reason",
+      "value": "应用需要获取网络状态信息以确保网络连接正常"
     }
   ]
 }

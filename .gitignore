@@ -1,12 +1,49 @@
+# Dependencies
 /node_modules
 /oh_modules
-/local.properties
-/.idea
+
+# Build outputs
 **/build
 /.hvigor
 .cxx
+**/.test
+/.appanalyzer
+build-profile.json5
+
+# IDE files
+/.idea
+.vscode/
+*.swp
+*.swo
+*~
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Local configuration
+/local.properties
+
+# Development tools
 /.clangd
 /.clang-format
 /.clang-tidy
-**/.test
-/.appanalyzer
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# Temporary folders
+tmp/
+temp/

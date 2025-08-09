@@ -1,10 +1,10 @@
 {
   "name": "entry",
   "version": "1.0.0",
-  "description": "Please describe the basic information.",
+  "description": "VoiceHub entry module - Main application entry point",
   "main": "",
-  "author": "",
-  "license": "",
+  "author": "LaoShui",
+  "license": "GPL-3.0",
   "dependencies": {}
 }
 
