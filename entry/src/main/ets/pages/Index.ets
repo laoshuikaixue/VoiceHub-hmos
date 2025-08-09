@@ -4,6 +4,10 @@ import { image } from '@kit.ImageKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { http } from '@kit.NetworkKit';
+import { preferences } from '@kit.ArkData';
+import { WebViewSettings } from '../components/WebViewSettings';
+import { DebugInfo } from '../components/DebugInfo';
+import { WebLoadingProgress } from '../components/LoadingProgress';
 
 const TAG = 'VoiceHubIndex';
 const DOMAIN = 0x0000;
@@ -15,11 +19,11 @@ struct Index {
   @State loadProgress: number = 0;
   @State currentUrl: string = 'https://voicehub.lao-shui.top';
   @State isPlaying: boolean = false;
-  @State currentSong: string = '';
-  @State currentArtist: string = '';
-  @State currentCover: string = '';
   @State showDebugInfo: boolean = false;
   @State debugMessages: string[] = [];
+  @State showUrlSettings: boolean = false;
+  @State inputUrl: string = '';
+  @State savedUrls: string[] = [];
   
   // 播放列表状态
   @State currentPlaylistIndex: number = -1;
@@ -34,9 +38,12 @@ struct Index {
   private webController: webview.WebviewController = new webview.WebviewController();
   private session?: avSession.AVSession;
   private isSessionActive: boolean = false;
+  private dataPreferences?: preferences.Preferences;
 
   aboutToAppear() {
     this.addDebugMessage('🚀 VoiceHub 应用启动');
+    // 初始化数据存储
+    this.initPreferences();
     // 检查网络连接
     this.checkNetworkConnection();
     // 在预览模式下不初始化AVSession
@@ -50,6 +57,28 @@ struct Index {
 
   aboutToDisappear() {
     this.releaseAVSession();
+  }
+
+  // 重写返回按键处理逻辑
+  onBackPress(): boolean {
+    // 如果设置页面已打开，先关闭设置页面
+    if (this.showUrlSettings) {
+      this.showUrlSettings = false;
+      this.addDebugMessage('🔙 关闭设置页面');
+      return true;
+    }
+    
+    // 检查WebView是否可以返回上一页
+    if (this.webController.accessBackward()) {
+      this.webController.backward();
+      this.addDebugMessage('🔙 WebView返回上一页');
+      return true;
+    }
+    
+    // 如果WebView无法返回且在首页，则打开设置页面
+    this.showUrlSettings = true;
+    this.addDebugMessage('🔙 首页左滑效果：打开设置页面');
+    return true;
   }
 
   // 添加调试信息到界面显示
@@ -67,6 +96,100 @@ struct Index {
   // 清除调试信息
   private clearDebugMessages(): void {
     this.debugMessages = [];
+  }
+
+  // 初始化数据存储
+  private async initPreferences(): Promise<void> {
+    try {
+      this.dataPreferences = await preferences.getPreferences(getContext(this), 'voicehub_settings');
+      await this.loadSavedUrls();
+      await this.loadCurrentUrl();
+      this.addDebugMessage('✅ 数据存储初始化成功');
+    } catch (error) {
+      this.addDebugMessage(`❌ 数据存储初始化失败: ${JSON.stringify(error)}`);
+    }
+  }
+
+  // 加载保存的URL列表
+  private async loadSavedUrls(): Promise<void> {
+    try {
+      if (this.dataPreferences) {
+        const urls = await this.dataPreferences.get('saved_urls', '[]') as string;
+        this.savedUrls = JSON.parse(urls);
+        this.addDebugMessage(`📋 加载了 ${this.savedUrls.length} 个保存的URL`);
+      }
+    } catch (error) {
+      this.addDebugMessage(`❌ 加载URL列表失败: ${JSON.stringify(error)}`);
+      this.savedUrls = [];
+    }
+  }
+
+  // 加载当前URL
+  private async loadCurrentUrl(): Promise<void> {
+    try {
+      if (this.dataPreferences) {
+        const savedUrl = await this.dataPreferences.get('current_url', this.currentUrl) as string;
+        this.currentUrl = savedUrl;
+        this.inputUrl = savedUrl;
+        this.addDebugMessage(`🌐 加载当前URL: ${this.currentUrl}`);
+      }
+    } catch (error) {
+      this.addDebugMessage(`❌ 加载当前URL失败: ${JSON.stringify(error)}`);
+    }
+  }
+
+  // 保存URL到列表
+  private async saveUrl(url: string): Promise<void> {
+    try {
+      if (!url.trim()) return;
+      
+      // 验证URL格式
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'https://' + url;
+      }
+      
+      // 避免重复
+      if (!this.savedUrls.includes(url)) {
+        this.savedUrls.unshift(url);
+        // 最多保存10个URL
+        if (this.savedUrls.length > 10) {
+          this.savedUrls = this.savedUrls.slice(0, 10);
+        }
+        
+        if (this.dataPreferences) {
+          await this.dataPreferences.put('saved_urls', JSON.stringify(this.savedUrls));
+          await this.dataPreferences.flush();
+        }
+      }
+      
+      // 设置为当前URL
+      this.currentUrl = url;
+      if (this.dataPreferences) {
+        await this.dataPreferences.put('current_url', url);
+        await this.dataPreferences.flush();
+      }
+      
+      this.addDebugMessage(`💾 URL已保存: ${url}`);
+    } catch (error) {
+      this.addDebugMessage(`❌ 保存URL失败: ${JSON.stringify(error)}`);
+    }
+  }
+
+  // 删除保存的URL
+  private async deleteUrl(url: string): Promise<void> {
+    try {
+      const index = this.savedUrls.indexOf(url);
+      if (index > -1) {
+        this.savedUrls.splice(index, 1);
+        if (this.dataPreferences) {
+          await this.dataPreferences.put('saved_urls', JSON.stringify(this.savedUrls));
+          await this.dataPreferences.flush();
+        }
+        this.addDebugMessage(`🗑️ URL已删除: ${url}`);
+      }
+    } catch (error) {
+      this.addDebugMessage(`❌ 删除URL失败: ${JSON.stringify(error)}`);
+    }
   }
 
   // 检查网络连接
@@ -588,32 +711,20 @@ struct Index {
     if (!this.session) return;
     
     try {
-      // 构建完整的AVMetadata对象，保持现有的元数据，只更新歌词
+      // 构建基础的AVMetadata对象，只更新歌词
       const metadata: avSession.AVMetadata = {
         assetId: 'voicehub_web_player',
-        title: this.currentSong || '',
-        artist: this.currentArtist || '',
-        album: '', // 保持空值，因为我们没有存储专辑信息
-        writer: this.currentArtist || '',
-        composer: this.currentArtist || '',
+        title: '',
+        artist: '',
+        album: '',
+        writer: '',
+        composer: '',
         duration: this.currentDuration, // 保持现有的时长信息
-        description: `${this.currentSong || ''} - ${this.currentArtist || ''}`,
+        description: '',
         lyric: lyrics, // 更新歌词
         previousAssetId: '',
         nextAssetId: ''
       };
-      
-      // 如果有封面图片，重新加载并设置
-      if (this.currentCover && this.currentCover.trim() !== '') {
-        try {
-          const pixelMap = await this.loadCoverImage(this.currentCover);
-          if (pixelMap) {
-            metadata.mediaImage = pixelMap;
-          }
-        } catch (error) {
-          hilog.warn(DOMAIN, TAG, `Failed to reload cover image for lyrics update: ${JSON.stringify(error)}`);
-        }
-      }
       
       await this.session.setAVMetadata(metadata);
       hilog.info(DOMAIN, TAG, `Lyrics only updated: ${lyrics.length} characters`);
@@ -717,66 +828,18 @@ struct Index {
     }
 
     try {
-      // 获取新的元数据信息，只有在提供有效值时才更新
-      let hasChanges = false;
-      let newSong = this.currentSong;
-      let newArtist = this.currentArtist;
-      let newCover = this.currentCover;
-      
-      // 只有在提供有效值且与当前值不同时才更新
-      if (params.title && typeof params.title === 'string' && params.title.trim() !== '') {
-        const titleValue = params.title.trim();
-        if (this.currentSong !== titleValue) {
-          newSong = titleValue;
-          hasChanges = true;
-        }
-      } else if (!this.currentSong || (params.title === '' && this.currentSong !== '')) {
-        // 处理停止播放时的清理
-        newSong = params.title || '';
-        hasChanges = true;
-      }
-      
-      if (params.artist && typeof params.artist === 'string' && params.artist.trim() !== '') {
-        const artistValue = params.artist.trim();
-        if (this.currentArtist !== artistValue) {
-          newArtist = artistValue;
-          hasChanges = true;
-        }
-      } else if (!this.currentArtist || (params.artist === '' && this.currentArtist !== '')) {
-        // 处理停止播放时的清理
-        newArtist = params.artist || '';
-        hasChanges = true;
-      }
-      
-      // 处理封面图片，支持 cover 和 artwork 两个字段
-      const coverParam: string | undefined = (params.artwork as string) || (params.cover as string);
-      if (coverParam !== undefined) {
-        const coverValue: string = coverParam || '';
-        if (this.currentCover !== coverValue) {
-          newCover = coverValue;
-          hasChanges = true;
-        }
-      }
-      
-      // 如果没有实际变化，跳过更新
-      if (!hasChanges) {
-        this.addDebugMessage(`🔄 元数据无变化，跳过更新: ${newSong || ''} - ${newArtist || ''}`);
-        hilog.info(DOMAIN, TAG, `Metadata unchanged, skipping update: ${newSong || ''} by ${newArtist || ''}`);
-        return;
-      }
-
-      // 更新本地状态
-      this.currentSong = newSong;
-      this.currentArtist = newArtist;
-      this.currentCover = newCover;
+      // 直接从参数获取元数据信息
+      const title = (params.title as string) || '';
+      const artist = (params.artist as string) || '';
+      const cover = (params.artwork as string) || (params.cover as string) || '';
       
       // 更新时长信息（如果提供）
       if (params.duration && typeof params.duration === 'number' && params.duration > 0) {
         this.currentDuration = Math.floor(params.duration * 1000); // 转换为毫秒
       }
 
-      hilog.info(DOMAIN, TAG, `Updating metadata: ${this.currentSong} by ${this.currentArtist}, cover: ${this.currentCover}`);
-      this.addDebugMessage(`🎵 更新歌曲元数据: ${this.currentSong} - ${this.currentArtist}`);
+      hilog.info(DOMAIN, TAG, `Updating metadata: ${title} by ${artist}, cover: ${cover}`);
+      this.addDebugMessage(`🎵 更新歌曲元数据: ${title} - ${artist}`);
 
       // 确保AVSession已激活
       if (!this.isSessionActive) {
@@ -791,8 +854,8 @@ struct Index {
       // 在API 12中，控制能力由注册的监听器自动确定，无需手动设置
 
       // 构建完整的AVMetadata对象，只使用前端传递的实际数据
-      const finalTitle = this.currentSong || '';
-      const finalArtist = this.currentArtist || '';
+      const finalTitle = title;
+      const finalArtist = artist;
       const finalAlbum = (params.album as string) || '';
       
       // 处理歌词 - 添加详细调试信息
@@ -843,11 +906,11 @@ struct Index {
       }
 
       // 如果有封面图片，处理封面
-      if (this.currentCover && this.currentCover.trim() !== '') {
-        hilog.info(DOMAIN, TAG, `Loading cover image: ${this.currentCover}`);
-        this.addDebugMessage(`🖼️ 加载封面图片: ${this.currentCover.substring(0, 50)}...`);
+      if (cover && cover.trim() !== '') {
+        hilog.info(DOMAIN, TAG, `Loading cover image: ${cover}`);
+        this.addDebugMessage(`🖼️ 加载封面图片: ${cover.substring(0, 50)}...`);
         try {
-          const pixelMap = await this.loadCoverImage(this.currentCover);
+          const pixelMap = await this.loadCoverImage(cover);
           if (pixelMap) {
             metadata.mediaImage = pixelMap;
             hilog.info(DOMAIN, TAG, 'Cover image added to metadata successfully');
@@ -882,8 +945,8 @@ struct Index {
         await this.updatePlayState(this.isPlaying, this.currentPosition, params.duration as number);
       }, 100);
       
-      hilog.info(DOMAIN, TAG, `Metadata updated successfully: ${this.currentSong} by ${this.currentArtist}`);
-      this.addDebugMessage(`✅ 元数据更新成功: ${this.currentSong} - ${this.currentArtist}`);
+      hilog.info(DOMAIN, TAG, `Metadata updated successfully: ${title} by ${artist}`);
+      this.addDebugMessage(`✅ 元数据更新成功: ${title} - ${artist}`);
     } catch (error) {
       hilog.error(DOMAIN, TAG, `Failed to update metadata: ${JSON.stringify(error)}`);
       this.addDebugMessage(`❌ 元数据更新失败: ${JSON.stringify(error)}`);
@@ -1114,203 +1177,119 @@ struct Index {
   }
 
   build() {
-    Column() {
-      // 顶部状态栏
-      Row() {
-        Text('VoiceHub')
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor('#ffffff')
-        
-        Blank()
-        
-        if (this.isPlaying && this.currentSong) {
-          Row() {
-            Text('♪')
-              .fontSize(16)
-              .fontColor('#4CAF50')
-              .margin({ right: 4 })
-            Column() {
-              Text(this.currentSong)
-                .fontSize(12)
-                .fontColor('#ffffff')
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-                .width('100%')
-              if (this.currentArtist) {
-                Text(this.currentArtist)
-                  .fontSize(10)
-                  .fontColor('#cccccc')
-                  .maxLines(1)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis })
-                  .width('100%')
-                  .margin({ top: 2 })
-              }
-            }
-            .alignItems(HorizontalAlign.Start)
-            .layoutWeight(1)
-          }
+    Stack() {
+      // 主内容区域 - WebView占满全屏
+      Column() {
+        // 加载进度条
+        WebLoadingProgress({ 
+          isLoading: this.isLoading, 
+          loadProgress: this.loadProgress 
+        })
+
+        // WebView显示完整网站
+        Web({ src: this.currentUrl, controller: this.webController })
           .layoutWeight(1)
-          .margin({ left: 16, right: 16 })
-          .alignItems(VerticalAlign.Center)
-        }
-        
-        // 按钮组
-        Row() {
-          // 刷新页面按钮
-          Button('刷新页面')
-            .fontSize(12)
-            .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-            .backgroundColor('#2196F3')
-            .fontColor('#ffffff')
-            .borderRadius(4)
-            .margin({ right: 8 })
-            .onClick(() => {
-              this.addDebugMessage('🔄 手动刷新网页页面...');
-              this.isLoading = true;
-              this.loadProgress = 0;
-              // 先尝试刷新，如果失败则重新加载URL
-              try {
-                this.webController.refresh();
-              } catch (error) {
-                this.addDebugMessage('⚠️ 刷新失败，尝试重新加载URL...');
-                this.webController.loadUrl(this.currentUrl);
+          .width('100%')
+          .javaScriptAccess(true)
+          .domStorageAccess(true)
+          .fileAccess(true)
+          .imageAccess(true)
+          .onlineImageAccess(true)
+          .databaseAccess(true)
+          .geolocationAccess(false)
+          .mixedMode(MixedMode.All)
+          .cacheMode(CacheMode.Default)
+          .userAgent('VoiceHub-HarmonyOS/1.0.0 (HarmonyOS; Mobile) Mozilla/5.0 (Linux; Android 10; HarmonyOS) AppleWebKit/537.36')
+          .onProgressChange((event) => {
+            this.loadProgress = event?.newProgress || 0;
+            this.addDebugMessage(`📊 页面加载进度: ${this.loadProgress}%`);
+          })
+          .onPageBegin((event) => {
+            this.addDebugMessage(`🌐 开始加载页面: ${event?.url || 'unknown'}`);
+            this.isLoading = true;
+          })
+          .onPageEnd(() => {
+            this.onPageEnd();
+          })
+          .onErrorReceive((event) => {
+            const errorInfo = event?.error?.getErrorInfo();
+            const errorCode = event?.error?.getErrorCode();
+            hilog.error(DOMAIN, TAG, `WebView error: ${errorInfo}, code: ${errorCode}`);
+            this.addDebugMessage(`❌ WebView 错误: ${errorInfo} (代码: ${errorCode})`);
+          })
+          .onHttpErrorReceive((event) => {
+            const statusCode = event?.response?.getResponseCode();
+            const url = event?.request?.getRequestUrl();
+            hilog.error(DOMAIN, TAG, `HTTP error: ${statusCode} for ${url}`);
+            this.addDebugMessage(`❌ HTTP 错误: ${statusCode} - ${url}`);
+          })
+          .onSslErrorReceive((event) => {
+            hilog.error(DOMAIN, TAG, `SSL error: ${JSON.stringify(event)}`);
+            this.addDebugMessage(`❌ SSL 错误: ${JSON.stringify(event)}`);
+          })
+          .javaScriptProxy({
+            object: {
+              onMessage: (message: string): void => {
+                this.onMessage(message);
               }
-            })
-          
-          // 调试信息开关按钮
-          Button('调试信息')
-            .fontSize(12)
-            .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-            .backgroundColor(this.showDebugInfo ? '#FF9800' : '#666666')
-            .fontColor('#ffffff')
-            .borderRadius(4)
-            .onClick(() => {
-              this.showDebugInfo = !this.showDebugInfo;
-              if (this.showDebugInfo) {
-                this.addDebugMessage('🔧 调试信息显示已开启');
-              }
-            })
-        }
+            },
+            name: 'harmonyos',
+            methodList: ['onMessage'],
+            controller: this.webController
+          })
       }
       .width('100%')
-      .height(56)
-      .padding({ left: 16, right: 16 })
-      .backgroundColor('#1a1a1a')
-      .justifyContent(FlexAlign.SpaceBetween)
-      .alignItems(VerticalAlign.Center)
-
-      // 加载进度条
-      if (this.isLoading) {
-        Progress({ value: this.loadProgress, total: 100, type: ProgressType.Linear })
-          .width('100%')
-          .height(2)
-          .color('#4CAF50')
-      }
-
-      // 调试信息显示区域
-      if (this.showDebugInfo && this.debugMessages.length > 0) {
-        Column() {
-          Row() {
-            Text('调试信息:')
-              .fontSize(14)
-              .fontColor('#ffffff')
-              .fontWeight(FontWeight.Bold)
-            
-            Blank()
-            
-            Button('清除日志')
-              .fontSize(12)
-              .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-              .backgroundColor('#666666')
-              .fontColor('#ffffff')
-              .borderRadius(4)
-              .onClick(() => {
-                this.clearDebugMessages();
-              })
-          }
-          .width('100%')
-          .margin({ bottom: 8 })
-          
-          Scroll() {
-            Column() {
-              ForEach(this.debugMessages, (message: string, index: number) => {
-                Text(message)
-                  .fontSize(11)
-                  .fontColor('#cccccc')
-                  .width('100%')
-                  .textAlign(TextAlign.Start)
-                  .margin({ bottom: 4 })
-                  .padding({ left: 4, right: 4, top: 2, bottom: 2 })
-                  .backgroundColor(index % 2 === 0 ? '#333333' : '#2a2a2a')
-                  .borderRadius(2)
-              }, (message: string, index: number) => `debug_${index}`)
+      .height('100%')
+      .gesture(
+        PanGesture({ fingers: 1, direction: PanDirection.Left, distance: 50 })
+          .onActionStart(() => {
+            // 左滑开始
+            this.addDebugMessage('👆 检测到左滑手势开始');
+          })
+          .onActionUpdate((event: GestureEvent) => {
+            // 左滑过程中，当滑动距离超过50像素时触发
+            if (event.offsetX < -50) {
+              // 检查WebView是否可以返回上一页
+              if (this.webController.accessBackward()) {
+                this.webController.backward();
+                this.addDebugMessage('🔙 左滑触发：WebView返回上一页');
+              } else {
+                // 如果WebView无法返回，则打开设置页面
+                this.showUrlSettings = true;
+                this.addDebugMessage('🔙 左滑触发：首页打开设置页面');
+              }
             }
-            .alignItems(HorizontalAlign.Start)
-          }
-          .scrollable(ScrollDirection.Vertical)
-          .scrollBar(BarState.Auto)
-          .height(150)
-        }
-        .width('100%')
-        .padding({ left: 16, right: 16, top: 8, bottom: 8 })
-        .backgroundColor('#1a1a1a')
-        .borderRadius(8)
-        .margin({ left: 8, right: 8, bottom: 8 })
-      }
+          })
+          .onActionEnd(() => {
+            // 左滑结束
+            this.addDebugMessage('👆 左滑手势结束');
+          })
+      )
 
-      // 内容区域 - WebView显示完整网站
-      Web({ src: this.currentUrl, controller: this.webController })
-        .layoutWeight(1)
-        .width('100%')
-        .javaScriptAccess(true)
-        .domStorageAccess(true)
-        .fileAccess(true)
-        .imageAccess(true)
-        .onlineImageAccess(true)
-        .databaseAccess(true)
-        .geolocationAccess(false)
-        .mixedMode(MixedMode.All)
-        .cacheMode(CacheMode.Default)
-        .userAgent('VoiceHub-HarmonyOS/1.0.0 (HarmonyOS; Mobile) Mozilla/5.0 (Linux; Android 10; HarmonyOS) AppleWebKit/537.36')
-        .onProgressChange((event) => {
-          this.loadProgress = event?.newProgress || 0;
-          this.addDebugMessage(`📊 页面加载进度: ${this.loadProgress}%`);
-        })
-        .onPageBegin((event) => {
-          this.addDebugMessage(`🌐 开始加载页面: ${event?.url || 'unknown'}`);
-          this.isLoading = true;
-        })
-        .onPageEnd(() => {
-          this.onPageEnd();
-        })
-        .onErrorReceive((event) => {
-          const errorInfo = event?.error?.getErrorInfo();
-          const errorCode = event?.error?.getErrorCode();
-          hilog.error(DOMAIN, TAG, `WebView error: ${errorInfo}, code: ${errorCode}`);
-          this.addDebugMessage(`❌ WebView 错误: ${errorInfo} (代码: ${errorCode})`);
-        })
-        .onHttpErrorReceive((event) => {
-          const statusCode = event?.response?.getResponseCode();
-          const url = event?.request?.getRequestUrl();
-          hilog.error(DOMAIN, TAG, `HTTP error: ${statusCode} for ${url}`);
-          this.addDebugMessage(`❌ HTTP 错误: ${statusCode} - ${url}`);
-        })
-        .onSslErrorReceive((event) => {
-          hilog.error(DOMAIN, TAG, `SSL error: ${JSON.stringify(event)}`);
-          this.addDebugMessage(`❌ SSL 错误: ${JSON.stringify(event)}`);
-        })
-        .javaScriptProxy({
-          object: {
-            onMessage: (message: string): void => {
-              this.onMessage(message);
-            }
-          },
-          name: 'harmonyos',
-          methodList: ['onMessage'],
-          controller: this.webController
-        })
-      .layoutWeight(1)
+
+
+      // URL设置界面
+      WebViewSettings({
+        showUrlSettings: $showUrlSettings,
+        currentUrl: $currentUrl,
+        inputUrl: $inputUrl,
+        savedUrls: $savedUrls,
+        showDebugInfo: $showDebugInfo,
+        webController: this.webController,
+        dataPreferences: this.dataPreferences,
+        addDebugMessage: this.addDebugMessage.bind(this),
+        saveUrl: this.saveUrl.bind(this),
+        deleteUrl: this.deleteUrl.bind(this)
+      })
+
+
+
+      // 调试信息组件
+      DebugInfo({
+        showDebugInfo: $showDebugInfo,
+        debugMessages: this.debugMessages,
+        clearDebugMessages: this.clearDebugMessages.bind(this)
+      })
     }
     .width('100%')
     .height('100%')
