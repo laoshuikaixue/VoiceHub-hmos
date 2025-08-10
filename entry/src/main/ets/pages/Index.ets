@@ -32,6 +32,12 @@ struct Index {
   @State hasNextSong: boolean = false;
   @State hasPreviousSong: boolean = false;
   
+  // 当前歌曲信息状态
+  private currentTitle: string = '';
+  private currentArtist: string = '';
+  private currentAlbum: string = '';
+  private currentCover: string = '';
+  
   // 播放位置状态（参考Melotopia项目）
   private currentPosition: number = 0;
   private currentDuration: number = 0;
@@ -488,7 +494,7 @@ struct Index {
           }
         },
         
-        // 更新歌词 - 新增接口
+        // 更新歌词
         updateLyrics: function(lyrics) {
           console.log('VoiceHub: Lyrics update received, length:', lyrics ? lyrics.length : 0);
           // 通过WebView消息机制发送到鸿蒙侧
@@ -548,13 +554,13 @@ struct Index {
           }
           break;
         case 'positionUpdate':
-          // 播放位置更新 - 新增事件类型
+          // 播放位置更新
           if (parameters && typeof parameters.position === 'number') {
             this.handlePositionUpdate(parameters);
           }
           break;
         case 'updateLyrics':
-          // 歌词更新 - 新增事件类型
+          // 歌词更新
           if (parameters) {
             this.handleLyricsUpdate(parameters);
           }
@@ -569,7 +575,7 @@ struct Index {
     }
   }
 
-  // 处理播放位置更新（新增方法）
+  // 处理播放位置更新
   private handlePositionUpdate(params: Record<string, ESObject>): void {
     try {
       const position = params.position as number;
@@ -588,7 +594,7 @@ struct Index {
     }
   }
 
-  // 处理歌词更新（新增方法）
+  // 处理歌词更新
   private async handleLyricsUpdate(params: Record<string, ESObject>): Promise<void> {
     try {
       const lyrics = params.lyrics as string;
@@ -705,28 +711,41 @@ struct Index {
     }
   }
 
-  // 仅更新歌词，不影响其他元数据
+  // 仅更新歌词，保持其他元数据不变
   private async updateLyricsOnly(lyrics: string): Promise<void> {
     if (!this.session) return;
     
     try {
-      // 构建基础的AVMetadata对象，只更新歌词
+      // 构建完整的AVMetadata对象，保持现有的歌曲信息，只更新歌词
       const metadata: avSession.AVMetadata = {
         assetId: 'voicehub_web_player',
-        title: '',
-        artist: '',
-        album: '',
-        writer: '',
-        composer: '',
+        title: this.currentTitle, // 使用保存的标题
+        artist: this.currentArtist, // 使用保存的艺术家
+        album: this.currentAlbum, // 使用保存的专辑
+        writer: this.currentArtist, // 使用保存的艺术家作为作词者
+        composer: this.currentArtist, // 使用保存的艺术家作为作曲者
         duration: this.currentDuration, // 保持现有的时长信息
-        description: '',
+        description: `${this.currentTitle} - ${this.currentArtist}`, // 使用保存的信息构建描述
         lyric: lyrics, // 更新歌词
         previousAssetId: '',
         nextAssetId: ''
       };
       
+      // 如果有封面图片，也要保持
+      if (this.currentCover && this.currentCover.trim() !== '') {
+        try {
+          const pixelMap = await this.loadCoverImage(this.currentCover);
+          if (pixelMap) {
+            metadata.mediaImage = pixelMap;
+          }
+        } catch (error) {
+          hilog.warn(DOMAIN, TAG, `Failed to reload cover image for lyrics update: ${JSON.stringify(error)}`);
+        }
+      }
+      
       await this.session.setAVMetadata(metadata);
-      hilog.info(DOMAIN, TAG, `Lyrics only updated: ${lyrics.length} characters`);
+      hilog.info(DOMAIN, TAG, `Lyrics only updated: ${lyrics.length} characters, title: ${this.currentTitle}, artist: ${this.currentArtist}`);
+      this.addDebugMessage(`🎤 歌词更新成功: ${lyrics.length} 字符，保持歌曲信息: ${this.currentTitle} - ${this.currentArtist}`);
     } catch (error) {
       hilog.error(DOMAIN, TAG, `Failed to update lyrics only: ${JSON.stringify(error)}`);
       this.addDebugMessage(`❌ 仅歌词更新失败: ${JSON.stringify(error)}`);
@@ -830,7 +849,14 @@ struct Index {
       // 直接从参数获取元数据信息
       const title = (params.title as string) || '';
       const artist = (params.artist as string) || '';
+      const album = (params.album as string) || '';
       const cover = (params.artwork as string) || (params.cover as string) || '';
+      
+      // 保存当前歌曲信息到实例变量
+      this.currentTitle = title;
+      this.currentArtist = artist;
+      this.currentAlbum = album;
+      this.currentCover = cover;
       
       // 更新时长信息（如果提供）
       if (params.duration && typeof params.duration === 'number' && params.duration > 0) {
