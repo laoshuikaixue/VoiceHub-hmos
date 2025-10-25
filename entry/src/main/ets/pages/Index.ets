@@ -427,58 +427,187 @@ struct Index {
             album: songInfo.album || '',
             cover: songInfo.cover || '',
             duration: songInfo.duration || 0,
-            lyrics: songInfo.lyrics || '' // 保持字段名一致：lyrics
+            lyrics: songInfo.lyrics || ''
           });
         },
         
         // 系统控制接口（供鸿蒙调用）
         play: function() {
           console.log('VoiceHub: System play command received');
-          // 使用window事件分发机制
+          
+          // 方案1: 直接调用全局播放器实例
+          if (window.voiceHubPlayerInstance && window.voiceHubPlayerInstance.play) {
+            console.log('VoiceHub: Using direct player instance for play');
+            window.voiceHubPlayerInstance.play();
+            return;
+          }
+          
+          // 方案2: 查找并直接操作音频元素
+          const audioElements = document.querySelectorAll('audio');
+          if (audioElements.length > 0) {
+            console.log('VoiceHub: Found audio elements, attempting direct play');
+            for (let audio of audioElements) {
+              if (audio.src && !audio.paused === false) {
+                audio.play().catch(e => console.warn('Direct audio play failed:', e));
+                break;
+              }
+            }
+          }
+          
+          // 方案3: 使用window事件分发机制
           window.dispatchEvent(new CustomEvent('harmonyos-play'));
-          // 备用方案：尝试Nuxt事件总线
+          
+          // 方案4: 尝试Nuxt事件总线
           if (window.__NUXT__ && window.__NUXT__.$nuxt && window.__NUXT__.$nuxt.$emit) {
             window.__NUXT__.$nuxt.$emit('harmonyos-play');
+          }
+          
+          // 方案5: 尝试Vue应用实例事件
+          if (window.$nuxt && window.$nuxt.$emit) {
+            window.$nuxt.$emit('harmonyos-play');
           }
         },
         
         pause: function() {
           console.log('VoiceHub: System pause command received');
+          
+          // 方案1: 直接调用全局播放器实例
+          if (window.voiceHubPlayerInstance && window.voiceHubPlayerInstance.pause) {
+            console.log('VoiceHub: Using direct player instance for pause');
+            window.voiceHubPlayerInstance.pause();
+            return;
+          }
+          
+          // 方案2: 查找并直接操作音频元素
+          const audioElements = document.querySelectorAll('audio');
+          if (audioElements.length > 0) {
+            console.log('VoiceHub: Found audio elements, attempting direct pause');
+            for (let audio of audioElements) {
+              if (audio.src && !audio.paused) {
+                audio.pause();
+                break;
+              }
+            }
+          }
+          
+          // 方案3: 使用window事件分发机制
           window.dispatchEvent(new CustomEvent('harmonyos-pause'));
+          
+          // 方案4: 尝试Nuxt事件总线
           if (window.__NUXT__ && window.__NUXT__.$nuxt && window.__NUXT__.$nuxt.$emit) {
             window.__NUXT__.$nuxt.$emit('harmonyos-pause');
+          }
+          
+          // 方案5: 尝试Vue应用实例事件
+          if (window.$nuxt && window.$nuxt.$emit) {
+            window.$nuxt.$emit('harmonyos-pause');
           }
         },
         
         stop: function() {
           console.log('VoiceHub: System stop command received');
+          
+          // 方案1: 直接调用全局播放器实例
+          if (window.voiceHubPlayerInstance && window.voiceHubPlayerInstance.stop) {
+            console.log('VoiceHub: Using direct player instance for stop');
+            window.voiceHubPlayerInstance.stop();
+            return;
+          }
+          
+          // 方案2: 查找并直接操作音频元素
+          const audioElements = document.querySelectorAll('audio');
+          if (audioElements.length > 0) {
+            console.log('VoiceHub: Found audio elements, attempting direct stop');
+            for (let audio of audioElements) {
+              if (audio.src) {
+                audio.pause();
+                audio.currentTime = 0;
+                break;
+              }
+            }
+          }
+          
+          // 方案3: 使用window事件分发机制
           window.dispatchEvent(new CustomEvent('harmonyos-stop'));
+          
+          // 方案4: 尝试Nuxt事件总线
           if (window.__NUXT__ && window.__NUXT__.$nuxt && window.__NUXT__.$nuxt.$emit) {
             window.__NUXT__.$nuxt.$emit('harmonyos-stop');
+          }
+          
+          // 方案5: 尝试Vue应用实例事件
+          if (window.$nuxt && window.$nuxt.$emit) {
+            window.$nuxt.$emit('harmonyos-stop');
           }
         },
         
         next: function() {
           console.log('VoiceHub: System next command received');
+          
+          // 使用window事件分发机制
           window.dispatchEvent(new CustomEvent('harmonyos-next'));
+          
+          // 尝试Nuxt事件总线
           if (window.__NUXT__ && window.__NUXT__.$nuxt && window.__NUXT__.$nuxt.$emit) {
             window.__NUXT__.$nuxt.$emit('harmonyos-next');
+          }
+          
+          // 尝试Vue应用实例事件
+          if (window.$nuxt && window.$nuxt.$emit) {
+            window.$nuxt.$emit('harmonyos-next');
           }
         },
         
         previous: function() {
           console.log('VoiceHub: System previous command received');
+          
+          // 使用window事件分发机制
           window.dispatchEvent(new CustomEvent('harmonyos-previous'));
+          
+          // 尝试Nuxt事件总线
           if (window.__NUXT__ && window.__NUXT__.$nuxt && window.__NUXT__.$nuxt.$emit) {
             window.__NUXT__.$nuxt.$emit('harmonyos-previous');
+          }
+          
+          // 尝试Vue应用实例事件
+          if (window.$nuxt && window.$nuxt.$emit) {
+            window.$nuxt.$emit('harmonyos-previous');
           }
         },
         
         seek: function(time) {
           console.log('VoiceHub: System seek command received, time:', time);
+          
+          // 方案1: 直接调用全局播放器实例
+          if (window.voiceHubPlayerInstance && window.voiceHubPlayerInstance.seek) {
+            console.log('VoiceHub: Using direct player instance for seek');
+            window.voiceHubPlayerInstance.seek(time);
+            return;
+          }
+          
+          // 方案2: 查找并直接操作音频元素
+          const audioElements = document.querySelectorAll('audio');
+          if (audioElements.length > 0) {
+            console.log('VoiceHub: Found audio elements, attempting direct seek');
+            for (let audio of audioElements) {
+              if (audio.src && audio.duration > 0) {
+                audio.currentTime = Math.min(time, audio.duration);
+                break;
+              }
+            }
+          }
+          
+          // 方案3: 使用window事件分发机制
           window.dispatchEvent(new CustomEvent('harmonyos-seek', { detail: { time: time } }));
+          
+          // 方案4: 尝试Nuxt事件总线
           if (window.__NUXT__ && window.__NUXT__.$nuxt && window.__NUXT__.$nuxt.$emit) {
             window.__NUXT__.$nuxt.$emit('harmonyos-seek', { time: time });
+          }
+          
+          // 方案5: 尝试Vue应用实例事件
+          if (window.$nuxt && window.$nuxt.$emit) {
+            window.$nuxt.$emit('harmonyos-seek', { time: time });
           }
         },
         
@@ -503,9 +632,6 @@ struct Index {
           });
         }
       };
-      
-      // 移除所有DOM音频元素监听的备用方案
-      // 只使用专门的前端状态同步机制，不进行任何本地判断或备用方案
       
       console.log('VoiceHub HarmonyOS bridge initialized');
     `;
@@ -836,8 +962,6 @@ struct Index {
     }
   }
 
-
-
   // 更新媒体元数据
   private async updateMetadata(params: Record<string, ESObject>): Promise<void> {
     if (!this.session) {
@@ -875,15 +999,13 @@ struct Index {
       // 记录播放列表状态 - 控制能力由监听器自动确定
       this.addDebugMessage(`🎛️ 元数据更新时播放列表状态: 下一首=${this.hasNextSong}, 上一首=${this.hasPreviousSong}`);
       hilog.info(DOMAIN, TAG, `Metadata update with playlist state: hasNext=${this.hasNextSong}, hasPrevious=${this.hasPreviousSong}`);
-      
-      // 在API 12中，控制能力由注册的监听器自动确定，无需手动设置
 
       // 构建完整的AVMetadata对象，只使用前端传递的实际数据
       const finalTitle = title;
       const finalArtist = artist;
       const finalAlbum = (params.album as string) || '';
       
-      // 处理歌词 - 添加详细调试信息
+      // 处理歌词
       const lyricsParam = params.lyrics as string;
       const finalLyrics = lyricsParam && typeof lyricsParam === 'string' ? lyricsParam : '';
       
@@ -978,7 +1100,7 @@ struct Index {
     }
   }
 
-  // 加载封面图片 - 基于华为官方案例优化
+  // 加载封面图片
   private async loadCoverImage(coverUrl: string): Promise<image.PixelMap | null> {
     try {
       this.addDebugMessage(`🌐 开始加载封面图片: ${coverUrl}`);
