@@ -2,12 +2,22 @@ import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.Ab
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
+import { webview } from '@kit.ArkWeb';
 
 const DOMAIN = 0x0000;
 
 export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
+    
+    // 预初始化 Web 引擎，减少首屏白屏时间
+    try {
+      webview.WebviewController.initializeWebEngine();
+      hilog.info(DOMAIN, 'testTag', 'Web engine initialized successfully');
+    } catch (error) {
+      hilog.error(DOMAIN, 'testTag', `Failed to initialize web engine: ${JSON.stringify(error)}`);
+    }
+
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onCreate');
   }
 

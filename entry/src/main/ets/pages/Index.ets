@@ -38,6 +38,7 @@ struct Index {
   private currentArtist: string = '';
   private currentAlbum: string = '';
   private currentCover: string = '';
+  private coverCache: Map<string, image.PixelMap> = new Map();
   
   // 播放位置状态（参考Melotopia项目）
   private currentPosition: number = 0;
@@ -185,6 +186,15 @@ struct Index {
         const savedUrl = await this.dataPreferences.get('current_url', this.currentUrl) as string;
         this.currentUrl = savedUrl;
         this.inputUrl = savedUrl;
+        
+        // 预连接当前URL，加速页面加载
+        try {
+          webview.WebviewController.prepareForPageLoad(this.currentUrl, true, 2);
+          this.addDebugMessage(`🚀 预连接URL: ${this.currentUrl}`);
+        } catch (err) {
+          hilog.warn(DOMAIN, TAG, `Failed to prepare for page load: ${JSON.stringify(err)}`);
+        }
+        
         this.addDebugMessage(`🌐 加载当前URL: ${this.currentUrl}`);
       }
     } catch (error) {
