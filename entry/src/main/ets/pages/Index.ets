@@ -1,4 +1,5 @@
 import { webview } from '@kit.ArkWeb';
+import { window } from '@kit.ArkUI';
 import { avSession } from '@kit.AVSessionKit';
 import { image } from '@kit.ImageKit';
 import { BusinessError } from '@kit.BasicServicesKit';
@@ -42,6 +43,10 @@ struct Index {
   private currentPosition: number = 0;
   private currentDuration: number = 0;
   
+  @State isImmersive: boolean = true;
+  @State safeAreaTypes: SafeAreaType[] = [SafeAreaType.SYSTEM];
+  @State safeAreaEdges: SafeAreaEdge[] = [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM];
+
   private webController: webview.WebviewController = new webview.WebviewController();
   private session?: avSession.AVSession;
   private isSessionActive: boolean = false;
@@ -86,6 +91,48 @@ struct Index {
     this.showUrlSettings = true;
     this.addDebugMessage('🔙 首页左滑效果：打开设置页面');
     return true;
+  }
+
+  // 检查并设置沉浸式模式
+  private checkAndSetImmersiveMode(url: string) {
+    const isDashboard = url.includes('/dashboard');
+    const enableImmersive = !isDashboard;
+    
+    // 如果状态没有变化，则不执行
+    if (this.isImmersive === enableImmersive) return;
+
+    this.isImmersive = enableImmersive;
+    
+    window.getLastWindow(getContext(this)).then((win: window.Window) => {
+      // 设置是否全屏
+      win.setWindowLayoutFullScreen(enableImmersive);
+      
+      if (enableImmersive) {
+        // 沉浸式：状态栏透明
+        win.setWindowSystemBarProperties({
+          statusBarColor: '#00000000',
+          navigationBarColor: '#00000000',
+          statusBarContentColor: '#FFFFFF' 
+        });
+        // 恢复安全区域设置
+        this.safeAreaTypes = [SafeAreaType.SYSTEM];
+        this.safeAreaEdges = [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM];
+        this.addDebugMessage(`✨ 切换到沉浸模式 (URL: ${url})`);
+      } else {
+        // 非沉浸式：恢复状态栏颜色
+        win.setWindowSystemBarProperties({
+          statusBarColor: '#000000',
+          navigationBarColor: '#000000',
+          statusBarContentColor: '#FFFFFF'
+        });
+        // 禁用安全区域设置，让内容不延伸到状态栏
+        this.safeAreaTypes = [];
+        this.safeAreaEdges = [];
+        this.addDebugMessage(`🔳 切换到普通模式 (Dashboard URL: ${url})`);
+      }
+    }).catch((err: BusinessError) => {
+      hilog.error(DOMAIN, TAG, `Failed to set immersive mode: ${JSON.stringify(err)}`);
+    });
   }
 
   // 添加调试信息到界面显示
@@ -634,6 +681,26 @@ struct Index {
       };
       
       console.log('VoiceHub HarmonyOS bridge initialized');
+
+      // 监听 SPA 路由变化
+      (function() {
+        var pushState = history.pushState;
+        var replaceState = history.replaceState;
+
+        history.pushState = function() {
+          pushState.apply(history, arguments);
+          window.HarmonyOS.callNative('urlChange', { url: window.location.href });
+        };
+
+        history.replaceState = function() {
+          replaceState.apply(history, arguments);
+          window.HarmonyOS.callNative('urlChange', { url: window.location.href });
+        };
+
+        window.addEventListener('popstate', function() {
+          window.HarmonyOS.callNative('urlChange', { url: window.location.href });
+        });
+      })();
     `;
     
     this.webController.runJavaScript(jsCode);
@@ -689,6 +756,14 @@ struct Index {
           // 歌词更新
           if (parameters) {
             this.handleLyricsUpdate(parameters);
+          }
+          break;
+        case 'urlChange':
+          // URL 变化
+          if (parameters && parameters.url) {
+            const url = parameters.url as string;
+            this.addDebugMessage(`🔗 路由变化: ${url}`);
+            this.checkAndSetImmersiveMode(url);
           }
           break;
         default:
@@ -1356,8 +1431,10 @@ struct Index {
             this.addDebugMessage(`📊 页面加载进度: ${this.loadProgress}%`);
           })
           .onPageBegin((event) => {
-            this.addDebugMessage(`🌐 开始加载页面: ${event?.url || 'unknown'}`);
+            const url = event?.url || 'unknown';
+            this.addDebugMessage(`🌐 开始加载页面: ${url}`);
             this.isLoading = true;
+            this.checkAndSetImmersiveMode(url);
           })
           .onPageEnd(() => {
             this.onPageEnd();
@@ -1446,6 +1523,6 @@ struct Index {
     .width('100%')
     .height('100%')
     .backgroundColor('#000000')
-    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+    .expandSafeArea(this.safeAreaTypes, this.safeAreaEdges)
   }
 }
