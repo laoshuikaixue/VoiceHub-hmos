@@ -10,12 +10,12 @@
   [![HarmonyOS](https://img.shields.io/badge/HarmonyOS-5.0+-blue.svg)](https://developer.harmonyos.com/)
   [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
   [![ArkTS](https://img.shields.io/badge/ArkTS-Latest-green.svg)](https://developer.harmonyos.com/cn/docs/documentation/doc-guides-V3/arkts-get-started-0000001504769321-V3)
-  [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+  [![License](https://img.shields.io/badge/License-GPLv3-yellow.svg)](LICENSE)
 </div>
 
 ## 📖 项目简介
 
-VoiceHub HarmonyOS 是 [VoiceHub](https://github.com/laoshuikaixue/VoiceHub) 校园广播站点歌系统的鸿蒙原生版本。<mcreference link="https://github.com/laoshuikaixue/VoiceHub" index="0"></mcreference> 该项目通过创新的混合架构设计，实现了Web端Vue音频播放器与鸿蒙原生端的跨平台音频控制同步。
+VoiceHub HarmonyOS 是 [VoiceHub](https://github.com/laoshuikaixue/VoiceHub) 校园广播站点歌系统的鸿蒙原生版本。<mcreference link="https://github.com/laoshuikaixue/VoiceHub" index="0"></mcreference>该项目通过创新的混合架构设计，实现了Web端Vue音频播放器与鸿蒙原生端的跨平台音频控制同步。
 
 ### 🏗️ 核心架构
 
@@ -152,7 +152,4 @@ private async updatePlaybackState(isPlaying: boolean, position: number): Promise
 
 ---
 
-<div align="center">
-  <p>⭐ 如果这个项目对您有帮助，请给我们一个星标！</p>
-  <p>Made with ❤️ by LaoShui</p>
-</div>
+Powered By LaoShui @ 2025-2026
