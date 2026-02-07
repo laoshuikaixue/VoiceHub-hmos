@@ -63,6 +63,16 @@ export default class EntryAbility extends UIAbility {
         }
         hilog.info(DOMAIN, 'testTag', 'Succeeded in setting the window system bar properties.');
       });
+
+      // 4. 隐藏状态栏（只显示导航栏）
+      windowClass.setWindowSystemBarEnable(['navigation'], (err: BusinessError) => {
+        let errCode: number = err.code;
+        if (errCode) {
+          hilog.error(DOMAIN, 'testTag', 'Failed to set the window system bar enable. Cause: ' + JSON.stringify(err));
+          return;
+        }
+        hilog.info(DOMAIN, 'testTag', 'Succeeded in setting the window system bar enable.');
+      });
     });
 
     windowStage.loadContent('pages/Index', (err) => {

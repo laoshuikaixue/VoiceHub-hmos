@@ -115,6 +115,8 @@ struct Index {
           navigationBarColor: '#00000000',
           statusBarContentColor: '#FFFFFF' 
         });
+        // 隐藏状态栏（只显示导航栏）
+        win.setWindowSystemBarEnable(['navigation']);
         // 恢复安全区域设置
         this.safeAreaTypes = [SafeAreaType.SYSTEM];
         this.safeAreaEdges = [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM];
@@ -126,6 +128,8 @@ struct Index {
           navigationBarColor: '#000000',
           statusBarContentColor: '#FFFFFF'
         });
+        // 显示状态栏和导航栏
+        win.setWindowSystemBarEnable(['status', 'navigation']);
         // 禁用安全区域设置，让内容不延伸到状态栏
         this.safeAreaTypes = [];
         this.safeAreaEdges = [];
