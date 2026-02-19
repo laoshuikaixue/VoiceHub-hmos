@@ -1,28 +1,25 @@
 {
-  "apiType": "stageMode",
-  "buildOption": {
-  },
-  "buildOptionSet": [
+  apiType: 'stageMode',
+  buildOption: {},
+  buildOptionSet: [
     {
-      "name": "release",
-      "arkOptions": {
-        "obfuscation": {
-          "ruleOptions": {
-            "enable": false,
-            "files": [
-              "./obfuscation-rules.txt"
-            ]
+      name: 'release',
+      arkOptions: {
+        obfuscation: {
+          ruleOptions: {
+            enable: false,
+            files: ['./obfuscation-rules.txt']
           }
         }
       }
-    },
+    }
   ],
-  "targets": [
+  targets: [
     {
-      "name": "default"
+      name: 'default'
     },
     {
-      "name": "ohosTest",
+      name: 'ohosTest'
     }
   ]
 }

@@ -1,9 +1,9 @@
 {
-  "name": "entry",
-  "version": "1.0.0",
-  "description": "VoiceHub entry module - Main application entry point",
-  "main": "",
-  "author": "LaoShui",
-  "license": "GPL-3.0",
-  "dependencies": {}
+  name: 'entry',
+  version: '1.0.0',
+  description: 'VoiceHub entry module - Main application entry point',
+  main: '',
+  author: 'LaoShui',
+  license: 'GPL-3.0',
+  dependencies: {}
 }

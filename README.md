@@ -29,17 +29,20 @@ VoiceHub HarmonyOS 是 [VoiceHub](https://github.com/laoshuikaixue/VoiceHub) 校
 ### ✨ 主要特性
 
 🎵 **跨平台音频控制同步**
+
 - 支持播放/暂停、切换歌曲、进度跳转等播控操作
 - Web端与原生端状态实时同步
 - 基于事件驱动的双向通信机制
 
 🎛️ **系统级媒体控制集成**
+
 - 通知栏媒体控制面板
 - 锁屏界面音频控制
 - 系统音量键控制支持
 - 蓝牙耳机控制支持
 
 📱 **原生体验优化**
+
 - 鸿蒙原生UI设计语言
 - 流畅的动画效果和交互反馈
 - 适配鸿蒙系统特性和规范
@@ -75,25 +78,25 @@ this.webController.runJavaScript(`
   if (window.voiceHubPlayer && window.voiceHubPlayer.play) {
     window.voiceHubPlayer.play();
   }
-`);
+`)
 
 // Web端向原生端发送状态更新
 window.nativeInterface.postMessage({
   method: 'updatePlayState',
   parameters: { isPlaying: true, position: 120.5 }
-});
+})
 ```
 
 ### AVSession媒体会话管理
 
 ```typescript
 // 创建AVSession实例
-this.session = await avSession.createAVSession(getContext(this), 'VoiceHub', 'audio');
+this.session = await avSession.createAVSession(getContext(this), 'VoiceHub', 'audio')
 
 // 注册系统控制命令监听
-this.session.on('play', this.handleSystemPlay.bind(this));
-this.session.on('pause', this.handleSystemPause.bind(this));
-this.session.on('playNext', this.handleSystemNext.bind(this));
+this.session.on('play', this.handleSystemPlay.bind(this))
+this.session.on('pause', this.handleSystemPause.bind(this))
+this.session.on('playNext', this.handleSystemNext.bind(this))
 
 // 更新媒体元数据
 await this.session.setAVMetadata({
@@ -101,7 +104,7 @@ await this.session.setAVMetadata({
   title: songTitle,
   artist: artistName,
   album: albumName
-});
+})
 ```
 
 ### 状态同步机制
@@ -110,12 +113,12 @@ await this.session.setAVMetadata({
 // 播放状态同步
 private async updatePlaybackState(isPlaying: boolean, position: number): Promise<void> {
   if (!this.session) return;
-  
+
   const playbackState: avSession.AVPlaybackState = {
     state: isPlaying ? avSession.PlaybackState.PLAY : avSession.PlaybackState.PAUSE,
     position: { elapsedTime: position * 1000, updateTime: Date.now() }
   };
-  
+
   await this.session.setAVPlaybackState(playbackState);
 }
 ```
@@ -123,24 +126,28 @@ private async updatePlaybackState(isPlaying: boolean, position: number): Promise
 ## 🎯 核心功能
 
 ### 1. 音频播放控制
+
 - ▶️ 播放/暂停控制
 - ⏭️ 上一首/下一首切换
 - 🔄 播放模式切换（顺序/随机/单曲循环）
 - ⏩ 进度跳转控制
 
 ### 2. 媒体信息展示
+
 - 🎵 歌曲标题、艺术家、专辑信息
 - 🖼️ 专辑封面图片显示
 - 📝 歌词同步显示
 - ⏱️ 播放进度和时长显示
 
 ### 3. 系统集成
+
 - 📱 通知栏媒体控制面板
 - 🔒 锁屏界面音频控制
 - 🎧 蓝牙设备控制支持
 - 🔊 音量键控制响应
 
 ### 4. 网络功能
+
 - 🌐 在线音乐流媒体播放
 - 📡 网络状态监控
 - 🔄 自动重连机制
