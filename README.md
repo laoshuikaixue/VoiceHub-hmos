@@ -146,12 +146,10 @@ private async updatePlaybackState(isPlaying: boolean, position: number): Promise
 - 🎧 蓝牙设备控制支持
 - 🔊 音量键控制响应
 
-### 4. 网络功能
+### 参考项目
 
-- 🌐 在线音乐流媒体播放
-- 📡 网络状态监控
-- 🔄 自动重连机制
-- 📊 播放质量自适应
+本项目在开发过程中参考和使用了以下优秀的开源项目：
+- [Melotopia - HamonyOS 原生音乐播放器](https://github.com/Chenlvin/Melotopia-HMOS)
 
 ## 📄 许可证
 
