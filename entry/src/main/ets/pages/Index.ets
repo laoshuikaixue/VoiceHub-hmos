@@ -534,7 +534,7 @@ struct Index {
       
       // 更新 Native 通信回调 (总是更新以确保通信正常)
       window.voiceHubPlayer.onPlayStateChanged = function(isPlaying, songInfo) {
-          console.log('VoiceHub: Play state changed', isPlaying, songInfo);
+          // console.log('VoiceHub: Play state changed', isPlaying, songInfo);
           window.HarmonyOS.callNative('updatePlayState', {
             isPlaying: isPlaying,
             title: songInfo.title || '',
@@ -542,12 +542,13 @@ struct Index {
             album: songInfo.album || '',
             cover: songInfo.cover || '',
             duration: songInfo.duration || 0,
-            position: songInfo.position || 0
+            position: songInfo.position || 0,
+            loopMode: songInfo.loopMode // 接收循环模式
           });
       };
       
       window.voiceHubPlayer.onSongChanged = function(songInfo) {
-          console.log('VoiceHub: Song changed', songInfo);
+          // console.log('VoiceHub: Song changed', songInfo);
           window.HarmonyOS.callNative('updateMetadata', {
             title: songInfo.title || '',
             artist: songInfo.artist || '',
@@ -559,7 +560,7 @@ struct Index {
       };
       
       window.voiceHubPlayer.updatePlaylistState = function(playlistState) {
-          console.log('VoiceHub: Playlist state update received:', playlistState);
+          // console.log('VoiceHub: Playlist state update received:', playlistState);
           // 通过WebView消息机制发送到鸿蒙侧
           if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.webViewHandler) {
             window.webkit.messageHandlers.webViewHandler.postMessage(JSON.stringify({
@@ -570,7 +571,7 @@ struct Index {
       };
       
       window.voiceHubPlayer.updateLyrics = function(lyrics) {
-          console.log('VoiceHub: Lyrics update received, length:', lyrics ? lyrics.length : 0);
+          // console.log('VoiceHub: Lyrics update received, length:', lyrics ? lyrics.length : 0);
           // 通过WebView消息机制发送到鸿蒙侧
           window.HarmonyOS.callNative('updateLyrics', {
             lyrics: lyrics || ''
@@ -815,9 +816,13 @@ struct Index {
   private onMessage(message: string): void {
     try {
       const data: Record<string, ESObject> = JSON.parse(message) as Record<string, ESObject>;
-      hilog.info(DOMAIN, TAG, `Received message from WebView: ${JSON.stringify(data)}`);
-      
       const method = data.method as string;
+      
+      // 避免日志刷屏，仅在非位置更新时输出日志
+      if (method !== 'positionUpdate' && method !== 'log') {
+         hilog.info(DOMAIN, TAG, `Received message from WebView: ${method}`);
+      }
+      
       const parameters = data.parameters as Record<string, ESObject>;
       
       switch (method) {
@@ -826,11 +831,10 @@ struct Index {
           if (parameters && typeof parameters.isPlaying === 'boolean') {
             const position = parameters.position as number;
             const duration = parameters.duration as number;
-            
-            // this.addDebugMessage(`📨 收到播放状态更新消息: ${parameters.isPlaying ? '播放' : '暂停'}`);
+            const loopMode = parameters.loopMode as number | undefined;
             
             // 只更新播放状态，不触发元数据更新
-            this.updatePlayState(parameters.isPlaying as boolean, position, duration);
+            this.updatePlayState(parameters.isPlaying as boolean, position, duration, loopMode);
             
             // 播放状态更新时不处理元数据，避免覆盖已设置的歌曲信息
             // 元数据应该通过专门的 updateMetadata 消息来更新
@@ -933,12 +937,17 @@ struct Index {
     if (!this.session) return;
     
     try {
-      // 根据播放列表状态确定循环模式
-      let loopMode = avSession.LoopMode.LOOP_MODE_SEQUENCE;
-      if (this.playlistLength <= 1) {
-        loopMode = avSession.LoopMode.LOOP_MODE_SINGLE;
-      } else if (!this.hasNextSong && !this.hasPreviousSong) {
-        loopMode = avSession.LoopMode.LOOP_MODE_SINGLE;
+      // 优先使用当前保存的循环模式
+      let loopMode = this.currentLoopMode;
+      
+      // 如果没有设置过循环模式，则根据播放列表状态推断
+      if (loopMode === undefined) {
+        loopMode = avSession.LoopMode.LOOP_MODE_SEQUENCE;
+        if (this.playlistLength <= 1) {
+          loopMode = avSession.LoopMode.LOOP_MODE_SINGLE;
+        } else if (!this.hasNextSong && !this.hasPreviousSong) {
+          loopMode = avSession.LoopMode.LOOP_MODE_SINGLE;
+        }
       }
 
       // 保持当前播放状态，只更新位置
@@ -953,10 +962,10 @@ struct Index {
       };
       
       await this.session.setAVPlaybackState(playbackState);
-      hilog.info(DOMAIN, TAG, `Position updated: ${positionInSeconds.toFixed(1)}s`);
+      hilog.info(DOMAIN, TAG, `Position updated: ${positionInSeconds.toFixed(1)}s, loopMode: ${loopMode}`);
     } catch (error) {
       hilog.error(DOMAIN, TAG, `Failed to update position only: ${JSON.stringify(error)}`);
-      this.addDebugMessage(`❌ 位置更新失败: ${JSON.stringify(error)}`);
+      // this.addDebugMessage(`❌ 位置更新失败: ${JSON.stringify(error)}`);
     }
   }
 
@@ -1076,18 +1085,23 @@ struct Index {
   }
 
   // 更新播放状态（参考Melotopia项目的分离式设计）
-  private async updatePlayState(isPlaying: boolean, position?: number, duration?: number): Promise<void> {
+  private async updatePlayState(isPlaying: boolean, position?: number, duration?: number, loopMode?: number): Promise<void> {
     try {
       const oldIsPlaying = this.isPlaying;
       this.isPlaying = isPlaying;
+      
+      // 更新循环模式 (如果提供了)
+      if (loopMode !== undefined) {
+        this.currentLoopMode = loopMode;
+      }
       
       // 总是更新位置，如果未提供则使用当前位置
       this.currentPosition = (position !== undefined && position >= 0) ? position : this.currentPosition;
       
       // 只在播放状态变化时输出详细日志
-      if (oldIsPlaying !== isPlaying) {
-        this.addDebugMessage(`🔄 播放状态变化: ${oldIsPlaying ? '播放' : '暂停'} → ${isPlaying ? '播放' : '暂停'} (位置: ${this.currentPosition.toFixed(1)}s)`);
-      }
+      // if (oldIsPlaying !== isPlaying) {
+      //   this.addDebugMessage(`🔄 播放状态变化: ${oldIsPlaying ? '播放' : '暂停'} → ${isPlaying ? '播放' : '暂停'} (位置: ${this.currentPosition.toFixed(1)}s)`);
+      // }
       
       if (this.session) {
         // 如果开始播放，激活AVSession
@@ -1106,19 +1120,19 @@ struct Index {
         }
         
         // 只在状态变化时输出成功日志
-        if (oldIsPlaying !== isPlaying) {
-          this.addDebugMessage(`✅ 播放状态更新成功: ${this.isPlaying ? '播放' : '暂停'}, 位置: ${this.currentPosition.toFixed(1)}s`);
-        }
+        // if (oldIsPlaying !== isPlaying) {
+        //   this.addDebugMessage(`✅ 播放状态更新成功: ${this.isPlaying ? '播放' : '暂停'}, 位置: ${this.currentPosition.toFixed(1)}s`);
+        // }
         
       } else {
         hilog.warn(DOMAIN, TAG, 'No AVSession available for playback state update');
-        this.addDebugMessage('⚠️ AVSession不可用，无法更新播放状态');
+        // this.addDebugMessage('⚠️ AVSession不可用，无法更新播放状态');
       }
       
-      hilog.info(DOMAIN, TAG, `Play state updated: ${this.isPlaying}, position: ${this.currentPosition}s, duration: ${duration}s`);
+      // hilog.info(DOMAIN, TAG, `Play state updated: ${this.isPlaying}, position: ${this.currentPosition}s, duration: ${duration}s`);
     } catch (error) {
       hilog.error(DOMAIN, TAG, `Failed to update play state: ${JSON.stringify(error)}`);
-      this.addDebugMessage(`❌ 播放状态更新失败: ${JSON.stringify(error)}`);
+      // this.addDebugMessage(`❌ 播放状态更新失败: ${JSON.stringify(error)}`);
     }
   }
 
