@@ -32,6 +32,7 @@ struct Index {
   @State playlistLength: number = 0;
   @State hasNextSong: boolean = false;
   @State hasPreviousSong: boolean = false;
+  @State currentLoopMode: number = avSession.LoopMode.LOOP_MODE_SEQUENCE;
   
   // 当前歌曲信息状态
   private currentTitle: string = '';
@@ -303,6 +304,7 @@ struct Index {
       this.session.on('playNext', this.handleSystemNext.bind(this));
       this.session.on('playPrevious', this.handleSystemPrevious.bind(this));
       this.session.on('seek', this.handleSystemSeek.bind(this));
+      this.session.on('setLoopMode', this.handleSystemLoopMode.bind(this));
       
       hilog.info(DOMAIN, TAG, 'AVSession control listeners registered successfully');
     } catch (error) {
@@ -398,7 +400,7 @@ struct Index {
   }
 
   private handleSystemSeek(time: number) {
-    // 系统传入的时间是毫秒，需要转换为秒
+    // ... existing implementation
     const timeInSeconds = time / 1000;
     this.addDebugMessage(`⏩ 系统控制: 跳转到 ${timeInSeconds.toFixed(1)}s (原始: ${time}ms)`);
     
@@ -419,6 +421,70 @@ struct Index {
         console.error('VoiceHub: Seek error:', error);
       }
     `);
+  }
+
+  private handleSystemLoopMode(mode: number) {
+    this.addDebugMessage(`🔄 系统控制: 收到循环模式切换请求 ${mode}`);
+    
+    // 参考 Melotopia 项目的 AVSessionUtils.ets 实现
+    // 重新映射循环模式，实现自定义的切换逻辑
+    // HarmonyOS: 0=SEQUENCE, 1=SINGLE, 2=LIST, 3=SHUFFLE
+    let targetMode = mode;
+    
+    // 自定义循环逻辑: 0->1, 1->2, 2->3, 3->0
+    // 但由于Web端可能不支持 3(SHUFFLE) 作为LoopMode，或者有不同的映射
+    // 我们这里先按照 Melotopia 的逻辑进行映射，确保持续切换
+    if (mode === avSession.LoopMode.LOOP_MODE_SEQUENCE) {
+      targetMode = avSession.LoopMode.LOOP_MODE_SINGLE;
+    } else if (mode === avSession.LoopMode.LOOP_MODE_SINGLE) {
+      targetMode = avSession.LoopMode.LOOP_MODE_LIST;
+    } else if (mode === avSession.LoopMode.LOOP_MODE_LIST) {
+      // 如果Web端支持随机播放(3)，则切换到3，否则回到0
+      // 这里的 3 在Web端会被映射为 'order'，可能会导致 System显示3 -> Web设为2 -> Web回传2 -> System显示2 的情况
+      // 但为了响应点击，我们还是切换到 3 (如果支持) 或者 0
+      targetMode = avSession.LoopMode.LOOP_MODE_SHUFFLE; 
+    } else {
+      targetMode = avSession.LoopMode.LOOP_MODE_SEQUENCE;
+    }
+    
+    // 如果 Web 端确实不支持 Shuffle (3) 作为 LoopMode (通常 Shuffle 是单独的开关)
+    // 我们可以跳过 3: 2 -> 0
+    // 修改为: 0->1, 1->2, 2->0 (三态循环)
+    if (mode === avSession.LoopMode.LOOP_MODE_LIST) {
+       targetMode = avSession.LoopMode.LOOP_MODE_SEQUENCE;
+    } else if (mode === avSession.LoopMode.LOOP_MODE_SHUFFLE) {
+       targetMode = avSession.LoopMode.LOOP_MODE_SEQUENCE;
+    }
+    
+    this.addDebugMessage(`🔄 映射循环模式: ${mode} -> ${targetMode}`);
+    this.currentLoopMode = targetMode;
+    
+    // 通知网页播放器切换循环模式
+    this.webController.runJavaScript(`
+      try {
+        const loopMode = ${targetMode};
+        
+        // 策略1: 优先调用 voiceHubPlayer.setLoopMode (通常由 useAudioPlayerSync 绑定)
+        if (window.voiceHubPlayer && window.voiceHubPlayer.setLoopMode) {
+          window.voiceHubPlayer.setLoopMode(loopMode);
+        } 
+        // 策略2: 调用 voiceHubPlayerInstance.setPlayMode (备用)
+        else if (window.voiceHubPlayerInstance && window.voiceHubPlayerInstance.setPlayMode) {
+          window.voiceHubPlayerInstance.setPlayMode(loopMode);
+        }
+        // 策略3: 事件分发 (保底)
+        else {
+          window.dispatchEvent(new CustomEvent('harmonyos-set-loop-mode', { detail: { mode: loopMode } }));
+        }
+      } catch (error) {
+        console.error('VoiceHub: Set loop mode error:', error);
+      }
+    `);
+    
+    // 立即更新AVSession状态
+    if (this.session) {
+      this.updateLoopModeOnly();
+    }
   }
 
   private releaseAVSession() {
@@ -463,10 +529,11 @@ struct Index {
         }
       };
       
-      // 为网页播放器提供系统控制接口
-      window.voiceHubPlayer = {
-        // 当网页播放器状态改变时调用
-        onPlayStateChanged: function(isPlaying, songInfo) {
+      // 确保 voiceHubPlayer 对象存在
+      window.voiceHubPlayer = window.voiceHubPlayer || {};
+      
+      // 更新 Native 通信回调 (总是更新以确保通信正常)
+      window.voiceHubPlayer.onPlayStateChanged = function(isPlaying, songInfo) {
           console.log('VoiceHub: Play state changed', isPlaying, songInfo);
           window.HarmonyOS.callNative('updatePlayState', {
             isPlaying: isPlaying,
@@ -477,10 +544,9 @@ struct Index {
             duration: songInfo.duration || 0,
             position: songInfo.position || 0
           });
-        },
-        
-        // 当歌曲信息更新时调用
-        onSongChanged: function(songInfo) {
+      };
+      
+      window.voiceHubPlayer.onSongChanged = function(songInfo) {
           console.log('VoiceHub: Song changed', songInfo);
           window.HarmonyOS.callNative('updateMetadata', {
             title: songInfo.title || '',
@@ -490,10 +556,31 @@ struct Index {
             duration: songInfo.duration || 0,
             lyrics: songInfo.lyrics || ''
           });
-        },
-        
-        // 系统控制接口（供鸿蒙调用）
-        play: function() {
+      };
+      
+      window.voiceHubPlayer.updatePlaylistState = function(playlistState) {
+          console.log('VoiceHub: Playlist state update received:', playlistState);
+          // 通过WebView消息机制发送到鸿蒙侧
+          if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.webViewHandler) {
+            window.webkit.messageHandlers.webViewHandler.postMessage(JSON.stringify({
+              method: 'updatePlaylistState',
+              parameters: playlistState
+            }));
+          }
+      };
+      
+      window.voiceHubPlayer.updateLyrics = function(lyrics) {
+          console.log('VoiceHub: Lyrics update received, length:', lyrics ? lyrics.length : 0);
+          // 通过WebView消息机制发送到鸿蒙侧
+          window.HarmonyOS.callNative('updateLyrics', {
+            lyrics: lyrics || ''
+          });
+      };
+
+      // 为网页播放器提供系统控制接口 (仅当不存在时赋值，优先保留 Vue 组件绑定的专用版本)
+      
+      if (!window.voiceHubPlayer.play) {
+        window.voiceHubPlayer.play = function() {
           console.log('VoiceHub: System play command received');
           
           // 方案1: 直接调用全局播放器实例
@@ -527,9 +614,11 @@ struct Index {
           if (window.$nuxt && window.$nuxt.$emit) {
             window.$nuxt.$emit('harmonyos-play');
           }
-        },
-        
-        pause: function() {
+        };
+      }
+      
+      if (!window.voiceHubPlayer.pause) {
+        window.voiceHubPlayer.pause = function() {
           console.log('VoiceHub: System pause command received');
           
           // 方案1: 直接调用全局播放器实例
@@ -563,9 +652,11 @@ struct Index {
           if (window.$nuxt && window.$nuxt.$emit) {
             window.$nuxt.$emit('harmonyos-pause');
           }
-        },
-        
-        stop: function() {
+        };
+      }
+      
+      if (!window.voiceHubPlayer.stop) {
+        window.voiceHubPlayer.stop = function() {
           console.log('VoiceHub: System stop command received');
           
           // 方案1: 直接调用全局播放器实例
@@ -600,9 +691,11 @@ struct Index {
           if (window.$nuxt && window.$nuxt.$emit) {
             window.$nuxt.$emit('harmonyos-stop');
           }
-        },
-        
-        next: function() {
+        };
+      }
+      
+      if (!window.voiceHubPlayer.next) {
+        window.voiceHubPlayer.next = function() {
           console.log('VoiceHub: System next command received');
           
           // 使用window事件分发机制
@@ -617,9 +710,11 @@ struct Index {
           if (window.$nuxt && window.$nuxt.$emit) {
             window.$nuxt.$emit('harmonyos-next');
           }
-        },
-        
-        previous: function() {
+        };
+      }
+      
+      if (!window.voiceHubPlayer.previous) {
+        window.voiceHubPlayer.previous = function() {
           console.log('VoiceHub: System previous command received');
           
           // 使用window事件分发机制
@@ -634,9 +729,11 @@ struct Index {
           if (window.$nuxt && window.$nuxt.$emit) {
             window.$nuxt.$emit('harmonyos-previous');
           }
-        },
-        
-        seek: function(time) {
+        };
+      }
+      
+      if (!window.voiceHubPlayer.seek) {
+        window.voiceHubPlayer.seek = function(time) {
           console.log('VoiceHub: System seek command received, time:', time);
           
           // 方案1: 直接调用全局播放器实例
@@ -670,29 +767,23 @@ struct Index {
           if (window.$nuxt && window.$nuxt.$emit) {
             window.$nuxt.$emit('harmonyos-seek', { time: time });
           }
-        },
-        
-        // 更新播放列表状态
-        updatePlaylistState: function(playlistState) {
-          console.log('VoiceHub: Playlist state update received:', playlistState);
-          // 通过WebView消息机制发送到鸿蒙侧
-          if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.webViewHandler) {
-            window.webkit.messageHandlers.webViewHandler.postMessage(JSON.stringify({
-              method: 'updatePlaylistState',
-              parameters: playlistState
-            }));
+        };
+      }
+      
+      if (!window.voiceHubPlayer.setLoopMode) {
+        window.voiceHubPlayer.setLoopMode = function(mode) {
+          console.log('VoiceHub: System setLoopMode command received, mode:', mode);
+          
+          // 方案1: 直接调用全局播放器实例
+          if (window.voiceHubPlayerInstance && window.voiceHubPlayerInstance.setPlayMode) {
+             window.voiceHubPlayerInstance.setPlayMode(mode);
+             return;
           }
-        },
-        
-        // 更新歌词
-        updateLyrics: function(lyrics) {
-          console.log('VoiceHub: Lyrics update received, length:', lyrics ? lyrics.length : 0);
-          // 通过WebView消息机制发送到鸿蒙侧
-          window.HarmonyOS.callNative('updateLyrics', {
-            lyrics: lyrics || ''
-          });
-        }
-      };
+          
+          // 方案2: 使用window事件分发机制
+          window.dispatchEvent(new CustomEvent('harmonyos-set-loop-mode', { detail: { mode: mode } }));
+        };
+      }
       
       console.log('VoiceHub HarmonyOS bridge initialized');
 
@@ -736,7 +827,7 @@ struct Index {
             const position = parameters.position as number;
             const duration = parameters.duration as number;
             
-            this.addDebugMessage(`📨 收到播放状态更新消息: ${parameters.isPlaying ? '播放' : '暂停'}`);
+            // this.addDebugMessage(`📨 收到播放状态更新消息: ${parameters.isPlaying ? '播放' : '暂停'}`);
             
             // 只更新播放状态，不触发元数据更新
             this.updatePlayState(parameters.isPlaying as boolean, position, duration);
@@ -778,6 +869,12 @@ struct Index {
             const url = parameters.url as string;
             this.addDebugMessage(`🔗 路由变化: ${url}`);
             this.checkAndSetImmersiveMode(url);
+          }
+          break;
+        case 'log':
+          // 前端日志
+          if (parameters && parameters.message) {
+            this.addDebugMessage(`🖥️ 前端日志: ${parameters.message}`);
           }
           break;
         default:
@@ -868,23 +965,29 @@ struct Index {
     try {
       const oldHasNext = this.hasNextSong;
       const oldHasPrevious = this.hasPreviousSong;
+      const oldLoopMode = this.currentLoopMode;
       
       this.currentPlaylistIndex = (params.currentIndex as number) || -1;
       this.playlistLength = (params.playlistLength as number) || 0;
       this.hasNextSong = (params.hasNext as boolean) || false;
       this.hasPreviousSong = (params.hasPrevious as boolean) || false;
       
-      this.addDebugMessage(`📋 播放列表状态更新: 当前${this.currentPlaylistIndex + 1}/${this.playlistLength}, 上一首:${this.hasPreviousSong}, 下一首:${this.hasNextSong}`);
+      // 更新循环模式 (如果提供了)
+      if (params.loopMode !== undefined && params.loopMode !== null) {
+        this.currentLoopMode = params.loopMode as number;
+      }
+      
+      this.addDebugMessage(`📋 播放列表状态更新: 当前${this.currentPlaylistIndex + 1}/${this.playlistLength}, 上一首:${this.hasPreviousSong}, 下一首:${this.hasNextSong}, 循环:${this.currentLoopMode}`);
       
       // 播放列表状态变化时，只更新循环模式，不重复设置播放状态
       if (this.session && this.isSessionActive && 
-          (oldHasNext !== this.hasNextSong || oldHasPrevious !== this.hasPreviousSong)) {
+          (oldHasNext !== this.hasNextSong || oldHasPrevious !== this.hasPreviousSong || oldLoopMode !== this.currentLoopMode)) {
         
         // 只更新循环模式，保持当前播放状态和位置
         await this.updateLoopModeOnly();
         
         this.addDebugMessage('🔄 播放列表状态变化，仅更新循环模式');
-        hilog.info(DOMAIN, TAG, `Playlist state changed: hasNext=${this.hasNextSong}, hasPrevious=${this.hasPreviousSong}`);
+        hilog.info(DOMAIN, TAG, `Playlist state changed: hasNext=${this.hasNextSong}, hasPrevious=${this.hasPreviousSong}, loopMode=${this.currentLoopMode}`);
       }
       
       hilog.info(DOMAIN, TAG, `Playlist state updated: index=${this.currentPlaylistIndex}, length=${this.playlistLength}, hasNext=${this.hasNextSong}, hasPrevious=${this.hasPreviousSong}`);
@@ -899,12 +1002,17 @@ struct Index {
     if (!this.session) return;
     
     try {
-      // 根据播放列表状态确定循环模式
-      let loopMode = avSession.LoopMode.LOOP_MODE_SEQUENCE;
-      if (this.playlistLength <= 1) {
-        loopMode = avSession.LoopMode.LOOP_MODE_SINGLE;
-      } else if (!this.hasNextSong && !this.hasPreviousSong) {
-        loopMode = avSession.LoopMode.LOOP_MODE_SINGLE;
+      // 优先使用当前保存的循环模式
+      let loopMode = this.currentLoopMode;
+      
+      // 如果没有设置过循环模式，则根据播放列表状态推断
+      if (loopMode === undefined) {
+        loopMode = avSession.LoopMode.LOOP_MODE_SEQUENCE;
+        if (this.playlistLength <= 1) {
+          loopMode = avSession.LoopMode.LOOP_MODE_SINGLE;
+        } else if (!this.hasNextSong && !this.hasPreviousSong) {
+          loopMode = avSession.LoopMode.LOOP_MODE_SINGLE;
+        }
       }
 
       // 获取当前播放状态，只更新循环模式
@@ -1019,12 +1127,17 @@ struct Index {
     if (!this.session) return;
     
     try {
-      // 根据播放列表状态确定循环模式
-      let loopMode = avSession.LoopMode.LOOP_MODE_SEQUENCE;
-      if (this.playlistLength <= 1) {
-        loopMode = avSession.LoopMode.LOOP_MODE_SINGLE;
-      } else if (!this.hasNextSong && !this.hasPreviousSong) {
-        loopMode = avSession.LoopMode.LOOP_MODE_SINGLE;
+      // 优先使用当前保存的循环模式
+      let loopMode = this.currentLoopMode;
+      
+      // 如果没有设置过循环模式，则根据播放列表状态推断
+      if (loopMode === undefined) {
+        loopMode = avSession.LoopMode.LOOP_MODE_SEQUENCE;
+        if (this.playlistLength <= 1) {
+          loopMode = avSession.LoopMode.LOOP_MODE_SINGLE;
+        } else if (!this.hasNextSong && !this.hasPreviousSong) {
+          loopMode = avSession.LoopMode.LOOP_MODE_SINGLE;
+        }
       }
 
       // 参考Melotopia的实现，同时设置播放状态和位置信息
