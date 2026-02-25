@@ -41,7 +41,7 @@ struct Index {
   private currentCover: string = '';
   private coverCache: Map<string, image.PixelMap> = new Map();
   
-  // 播放位置状态（参考Melotopia项目）
+  // 播放位置状态
   private currentPosition: number = 0;
   private currentDuration: number = 0;
   
@@ -78,25 +78,29 @@ struct Index {
     // 如果设置页面已打开，先关闭设置页面
     if (this.showUrlSettings) {
       this.showUrlSettings = false;
-      this.addDebugMessage('🔙 关闭设置页面');
+      // this.addDebugMessage('🔙 关闭设置页面');
       return true;
     }
     
     // 检查WebView是否可以返回上一页
     if (this.webController.accessBackward()) {
       this.webController.backward();
-      this.addDebugMessage('🔙 WebView返回上一页');
+      // this.addDebugMessage('🔙 WebView返回上一页');
       return true;
     }
     
     // 如果WebView无法返回且在首页，则打开设置页面
     this.showUrlSettings = true;
-    this.addDebugMessage('🔙 首页左滑效果：打开设置页面');
+    // this.addDebugMessage('🔙 首页左滑效果：打开设置页面');
     return true;
   }
 
   // 检查并设置沉浸式模式
   private checkAndSetImmersiveMode(url: string) {
+    // 预留功能：暂时禁用沉浸式模式切换，保持默认的全屏沉浸式体验
+    return;
+
+    /*
     const isDashboard = url.includes('/dashboard');
     const enableImmersive = !isDashboard;
     
@@ -139,6 +143,7 @@ struct Index {
     }).catch((err: BusinessError) => {
       hilog.error(DOMAIN, TAG, `Failed to set immersive mode: ${JSON.stringify(err)}`);
     });
+    */
   }
 
   // 添加调试信息到界面显示
@@ -340,7 +345,7 @@ struct Index {
 
   // 系统控制命令处理 - 通过WebView与网页播放器交互
   private handleSystemPlay() {
-    this.addDebugMessage('▶️ 系统控制: 播放');
+    // this.addDebugMessage('▶️ 系统控制: 播放');
     // 通知网页播放器播放
     this.webController.runJavaScript(`
       if (window.voiceHubPlayer && window.voiceHubPlayer.play) {
@@ -350,7 +355,7 @@ struct Index {
   }
 
   private handleSystemPause() {
-    this.addDebugMessage('⏸️ 系统控制: 暂停');
+    // this.addDebugMessage('⏸️ 系统控制: 暂停');
     // 通知网页播放器暂停
     this.webController.runJavaScript(`
       if (window.voiceHubPlayer && window.voiceHubPlayer.pause) {
@@ -360,7 +365,7 @@ struct Index {
   }
 
   private handleSystemStop() {
-    this.addDebugMessage('⏹️ 系统控制: 停止');
+    // this.addDebugMessage('⏹️ 系统控制: 停止');
     // 通知网页播放器停止
     this.webController.runJavaScript(`
       if (window.voiceHubPlayer && window.voiceHubPlayer.stop) {
@@ -371,11 +376,11 @@ struct Index {
 
   private handleSystemNext() {
     if (!this.hasNextSong) {
-      this.addDebugMessage('⏭️ 系统控制: 下一首 (已禁用 - 没有下一首)');
+      // this.addDebugMessage('⏭️ 系统控制: 下一首 (已禁用 - 没有下一首)');
       return;
     }
-    
-    this.addDebugMessage('⏭️ 系统控制: 下一首');
+
+    // this.addDebugMessage('⏭️ 系统控制: 下一首');
     // 通知网页播放器下一首
     this.webController.runJavaScript(`
       if (window.voiceHubPlayer && window.voiceHubPlayer.next) {
@@ -386,11 +391,11 @@ struct Index {
 
   private handleSystemPrevious() {
     if (!this.hasPreviousSong) {
-      this.addDebugMessage('⏮️ 系统控制: 上一首 (已禁用 - 没有上一首)');
+      // this.addDebugMessage('⏮️ 系统控制: 上一首 (已禁用 - 没有上一首)');
       return;
     }
-    
-    this.addDebugMessage('⏮️ 系统控制: 上一首');
+
+    // this.addDebugMessage('⏮️ 系统控制: 上一首');
     // 通知网页播放器上一首
     this.webController.runJavaScript(`
       if (window.voiceHubPlayer && window.voiceHubPlayer.previous) {
@@ -402,7 +407,7 @@ struct Index {
   private handleSystemSeek(time: number) {
     // ... existing implementation
     const timeInSeconds = time / 1000;
-    this.addDebugMessage(`⏩ 系统控制: 跳转到 ${timeInSeconds.toFixed(1)}s (原始: ${time}ms)`);
+    // this.addDebugMessage(`⏩ 系统控制: 跳转到 ${timeInSeconds.toFixed(1)}s (原始: ${time}ms)`);
     
     // 通知网页播放器跳转进度（传递秒数）
     this.webController.runJavaScript(`
@@ -424,7 +429,7 @@ struct Index {
   }
 
   private handleSystemLoopMode(mode: number) {
-    this.addDebugMessage(`🔄 系统控制: 收到循环模式切换请求 ${mode}`);
+    // this.addDebugMessage(`🔄 系统控制: 收到循环模式切换请求 ${mode}`);
     
     // 参考 Melotopia 项目的 AVSessionUtils.ets 实现
     // 重新映射循环模式，实现自定义的切换逻辑
@@ -455,8 +460,8 @@ struct Index {
     } else if (mode === avSession.LoopMode.LOOP_MODE_SHUFFLE) {
        targetMode = avSession.LoopMode.LOOP_MODE_SEQUENCE;
     }
-    
-    this.addDebugMessage(`🔄 映射循环模式: ${mode} -> ${targetMode}`);
+
+    // this.addDebugMessage(`🔄 映射循环模式: ${mode} -> ${targetMode}`);
     this.currentLoopMode = targetMode;
     
     // 通知网页播放器切换循环模式
@@ -812,7 +817,7 @@ struct Index {
     this.webController.runJavaScript(jsCode);
   }
 
-  // 处理来自WebView的消息（改进事件驱动机制）
+  // 处理来自WebView的消息
   private onMessage(message: string): void {
     try {
       const data: Record<string, ESObject> = JSON.parse(message) as Record<string, ESObject>;
@@ -827,7 +832,7 @@ struct Index {
       
       switch (method) {
         case 'updatePlayState':
-          // 播放状态更新 - 优先级最高，立即处理
+          // 播放状态更新
           if (parameters && typeof parameters.isPlaying === 'boolean') {
             const position = parameters.position as number;
             const duration = parameters.duration as number;
@@ -835,9 +840,6 @@ struct Index {
             
             // 只更新播放状态，不触发元数据更新
             this.updatePlayState(parameters.isPlaying as boolean, position, duration, loopMode);
-            
-            // 播放状态更新时不处理元数据，避免覆盖已设置的歌曲信息
-            // 元数据应该通过专门的 updateMetadata 消息来更新
           }
           break;
         case 'updateMetadata':
@@ -851,7 +853,6 @@ struct Index {
           if (parameters) {
             this.updatePlaylistState(parameters).catch((error: Error | BusinessError) => {
               hilog.error(DOMAIN, TAG, `Failed to update playlist state: ${JSON.stringify(error)}`);
-              this.addDebugMessage(`❌ 播放列表状态更新异步失败: ${JSON.stringify(error)}`);
             });
           }
           break;
@@ -871,23 +872,20 @@ struct Index {
           // URL 变化
           if (parameters && parameters.url) {
             const url = parameters.url as string;
-            this.addDebugMessage(`🔗 路由变化: ${url}`);
             this.checkAndSetImmersiveMode(url);
           }
           break;
         case 'log':
           // 前端日志
           if (parameters && parameters.message) {
-            this.addDebugMessage(`🖥️ 前端日志: ${parameters.message}`);
+            // this.addDebugMessage(`🖥️ 前端日志: ${parameters.message}`);
           }
           break;
         default:
           hilog.warn(DOMAIN, TAG, `Unknown method: ${method}`);
-          this.addDebugMessage(`⚠️ 未知方法: ${method}`);
       }
     } catch (error) {
       hilog.error(DOMAIN, TAG, `Error parsing WebView message: ${error}`);
-      this.addDebugMessage(`❌ WebView消息解析错误: ${JSON.stringify(error)}`);
     }
   }
 
@@ -897,7 +895,6 @@ struct Index {
       const position = params.position as number;
       if (position !== undefined && position >= 0) {
         this.currentPosition = position;
-        this.addDebugMessage(`⏱️ 播放位置更新: ${position.toFixed(1)}s`);
         
         // 只更新位置信息，不改变播放状态
         if (this.session && this.isSessionActive) {
@@ -906,7 +903,6 @@ struct Index {
       }
     } catch (error) {
       hilog.error(DOMAIN, TAG, `Failed to handle position update: ${JSON.stringify(error)}`);
-      this.addDebugMessage(`❌ 播放位置更新失败: ${JSON.stringify(error)}`);
     }
   }
 
@@ -914,10 +910,8 @@ struct Index {
   private async handleLyricsUpdate(params: Record<string, ESObject>): Promise<void> {
     try {
       const lyrics = params.lyrics as string;
-      this.addDebugMessage(`🎤 收到歌词更新: 长度=${lyrics ? lyrics.length : 0}`);
       
       if (!this.session) {
-        this.addDebugMessage('⚠️ AVSession不可用，无法更新歌词');
         return;
       }
       
@@ -925,10 +919,8 @@ struct Index {
       await this.updateLyricsOnly(lyrics || '');
       
       hilog.info(DOMAIN, TAG, `Lyrics updated: ${lyrics ? lyrics.length : 0} characters`);
-      this.addDebugMessage(`✅ 歌词更新成功: ${lyrics ? lyrics.length : 0} 字符`);
     } catch (error) {
       hilog.error(DOMAIN, TAG, `Failed to handle lyrics update: ${JSON.stringify(error)}`);
-      this.addDebugMessage(`❌ 歌词更新失败: ${JSON.stringify(error)}`);
     }
   }
 
@@ -965,7 +957,6 @@ struct Index {
       hilog.info(DOMAIN, TAG, `Position updated: ${positionInSeconds.toFixed(1)}s, loopMode: ${loopMode}`);
     } catch (error) {
       hilog.error(DOMAIN, TAG, `Failed to update position only: ${JSON.stringify(error)}`);
-      // this.addDebugMessage(`❌ 位置更新失败: ${JSON.stringify(error)}`);
     }
   }
 
@@ -986,8 +977,6 @@ struct Index {
         this.currentLoopMode = params.loopMode as number;
       }
       
-      this.addDebugMessage(`📋 播放列表状态更新: 当前${this.currentPlaylistIndex + 1}/${this.playlistLength}, 上一首:${this.hasPreviousSong}, 下一首:${this.hasNextSong}, 循环:${this.currentLoopMode}`);
-      
       // 播放列表状态变化时，只更新循环模式，不重复设置播放状态
       if (this.session && this.isSessionActive && 
           (oldHasNext !== this.hasNextSong || oldHasPrevious !== this.hasPreviousSong || oldLoopMode !== this.currentLoopMode)) {
@@ -995,14 +984,12 @@ struct Index {
         // 只更新循环模式，保持当前播放状态和位置
         await this.updateLoopModeOnly();
         
-        this.addDebugMessage('🔄 播放列表状态变化，仅更新循环模式');
         hilog.info(DOMAIN, TAG, `Playlist state changed: hasNext=${this.hasNextSong}, hasPrevious=${this.hasPreviousSong}, loopMode=${this.currentLoopMode}`);
       }
       
       hilog.info(DOMAIN, TAG, `Playlist state updated: index=${this.currentPlaylistIndex}, length=${this.playlistLength}, hasNext=${this.hasNextSong}, hasPrevious=${this.hasPreviousSong}`);
     } catch (error) {
       hilog.error(DOMAIN, TAG, `Failed to update playlist state: ${JSON.stringify(error)}`);
-      this.addDebugMessage(`❌ 播放列表状态更新失败: ${JSON.stringify(error)}`);
     }
   }
 
@@ -1084,7 +1071,7 @@ struct Index {
     }
   }
 
-  // 更新播放状态（参考Melotopia项目的分离式设计）
+  // 更新播放状态
   private async updatePlayState(isPlaying: boolean, position?: number, duration?: number, loopMode?: number): Promise<void> {
     try {
       const oldIsPlaying = this.isPlaying;
@@ -1136,7 +1123,7 @@ struct Index {
     }
   }
 
-  // 设置播放状态和位置（参考Melotopia的playState和pauseState方法）
+  // 设置播放状态和位置
   private async setPlayStateWithPosition(isPlaying: boolean, positionInSeconds: number): Promise<void> {
     if (!this.session) return;
     
@@ -1154,7 +1141,6 @@ struct Index {
         }
       }
 
-      // 参考Melotopia的实现，同时设置播放状态和位置信息
       const playbackState: avSession.AVPlaybackState = {
         state: isPlaying ? avSession.PlaybackState.PLAYBACK_STATE_PLAY : avSession.PlaybackState.PLAYBACK_STATE_PAUSE,
         loopMode: loopMode,
@@ -1303,7 +1289,7 @@ struct Index {
 
       await this.session.setAVMetadata(metadata);
       
-      // 元数据更新后，立即更新播放状态和位置（参考Melotopia）
+      // 元数据更新后，立即更新播放状态和位置
       setTimeout(async () => {
         await this.updatePlayState(this.isPlaying, this.currentPosition, params.duration as number);
       }, 100);
@@ -1352,7 +1338,7 @@ struct Index {
                 const decodingOptions: image.DecodingOptions = {
                   // 是否可编辑
                   editable: false,
-                  // 像素格式：RGBA_8888 (参考官方案例)
+                  // 像素格式：RGBA_8888
                   desiredPixelFormat: image.PixelMapFormat.RGBA_8888,
                   // 创建图片大小 - 设置为合理的封面尺寸
                   desiredSize: { height: 300, width: 300 }
