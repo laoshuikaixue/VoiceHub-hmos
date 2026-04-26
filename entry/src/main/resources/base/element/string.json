@@ -19,6 +19,10 @@
     {
       "name": "network_info_permission_reason",
       "value": "应用需要获取网络状态信息以确保网络连接正常"
+    },
+    {
+      "name": "microphone_permission_reason",
+      "value": "应用需要使用麦克风进行听歌识曲功能"
     }
   ]
 }

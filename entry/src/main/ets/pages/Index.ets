@@ -6,6 +6,7 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { http } from '@kit.NetworkKit';
 import { preferences } from '@kit.ArkData';
+import { abilityAccessCtrl, common, Permissions } from '@kit.AbilityKit';
 import { WebViewSettings } from '../components/WebViewSettings';
 import { DebugInfo } from '../components/DebugInfo';
 import { WebLoadingProgress } from '../components/LoadingProgress';
@@ -54,13 +55,14 @@ struct Index {
   private isSessionActive: boolean = false;
   private dataPreferences?: preferences.Preferences;
 
+  private microphonePermissionGranted: boolean = false;
+  private microphonePermissionRequested: boolean = false;
+
   aboutToAppear() {
     this.addDebugMessage('🚀 VoiceHub 应用启动');
-    // 初始化数据存储
     this.initPreferences();
-    // 检查网络连接
     this.checkNetworkConnection();
-    // 在预览模式下不初始化AVSession
+    this.requestMicrophonePermission();
     try {
       this.initAVSession();
     } catch (error) {
@@ -294,6 +296,66 @@ struct Index {
     } catch (error) {
       this.addDebugMessage(`❌ 网络检查异常: ${JSON.stringify(error)}`);
     }
+  }
+
+  // 请求麦克风权限
+  private requestMicrophonePermission(): void {
+    this.addDebugMessage('🎤 请求麦克风权限...');
+
+    try {
+      const atManager: abilityAccessCtrl.AtManager = abilityAccessCtrl.createAtManager();
+      const permissions: Array<Permissions> = ['ohos.permission.MICROPHONE'];
+      const context: common.UIAbilityContext = getContext(this) as common.UIAbilityContext;
+
+      atManager.requestPermissionsFromUser(context, permissions).then((data) => {
+        const grantStatus: Array<number> = data.authResults as Array<number>;
+        let granted: boolean = false;
+
+        for (let i = 0; i < grantStatus.length; i++) {
+          if (grantStatus[i] === 0) {
+            granted = true;
+            break;
+          }
+        }
+
+        this.microphonePermissionGranted = granted;
+        this.microphonePermissionRequested = true;
+
+        if (granted) {
+          hilog.info(DOMAIN, TAG, 'Microphone permission granted by user');
+          this.addDebugMessage('✅ 麦克风权限已授权');
+        } else {
+          hilog.warn(DOMAIN, TAG, 'Microphone permission denied by user');
+          this.addDebugMessage('⚠️ 麦克风权限被拒绝');
+
+        }
+
+        this.notifyH5MicrophonePermission(granted);
+      }).catch((err: BusinessError) => {
+        this.microphonePermissionGranted = false;
+        this.microphonePermissionRequested = true;
+        hilog.error(DOMAIN, TAG, `Failed to request microphone permission. Code: ${err.code}, message: ${err.message}`);
+        this.addDebugMessage(`❌ 麦克风权限请求失败: ${err.message}`);
+        this.notifyH5MicrophonePermission(false);
+      });
+    } catch (error) {
+      hilog.error(DOMAIN, TAG, `Microphone permission request error: ${JSON.stringify(error)}`);
+    }
+  }
+
+  // 通知 H5 麦克风权限结果
+  private notifyH5MicrophonePermission(granted: boolean): void {
+    const grantedStr: string = granted ? 'true' : 'false';
+    this.webController.runJavaScript(`
+      try {
+        window.dispatchEvent(new CustomEvent('harmonyos-microphone-permission', {
+          detail: { granted: ${grantedStr} }
+        }));
+        console.log('VoiceHub: Microphone permission result sent to H5, granted=${grantedStr}');
+      } catch (error) {
+        console.error('VoiceHub: Failed to notify H5 about microphone permission:', error);
+      }
+    `);
   }
 
   // 初始化AVSession
@@ -879,6 +941,17 @@ struct Index {
           // 前端日志
           if (parameters && parameters.message) {
             // this.addDebugMessage(`🖥️ 前端日志: ${parameters.message}`);
+          }
+          break;
+        case 'requestMicrophonePermission':
+          this.addDebugMessage('🎤 H5 请求麦克风权限');
+          this.requestMicrophonePermission();
+          break;
+        case 'checkMicrophonePermission':
+          if (this.microphonePermissionRequested) {
+            this.notifyH5MicrophonePermission(this.microphonePermissionGranted);
+          } else {
+            this.requestMicrophonePermission();
           }
           break;
         default:
@@ -1552,6 +1625,16 @@ struct Index {
           .onControllerAttached(() => {
             this.controllerAttached = true;
             this.addDebugMessage('🔗 WebviewController 已成功绑定到 Web 组件');
+          })
+          .onPermissionRequest((event) => {
+            try {
+              const resources: Array<string> = event.request.getAccessibleResource();
+              hilog.info(DOMAIN, TAG, `WebView permission request: ${JSON.stringify(resources)}`);
+              event.request.grant(resources);
+              this.addDebugMessage(`🔓 WebView 权限已授权: ${JSON.stringify(resources)}`);
+            } catch (error) {
+              hilog.error(DOMAIN, TAG, `Failed to handle WebView permission: ${JSON.stringify(error)}`);
+            }
           })
           .onProgressChange((event) => {
             this.loadProgress = event?.newProgress || 0;
